@@ -1,6 +1,12 @@
 // ---------------------------
 // Telegram Translate Bot v2
 // ---------------------------
+Deno.serve(async (req) => {
+  const url = new URL(req.url);
+  
+  // Sadece /webhook path'ini kabul et
+  if (req.method !== "POST" || url.pathname !== "/webhook") 
+    return new Response("ok");
 
 import { franc } from "https://cdn.skypack.dev/franc@6.1.0";
 
