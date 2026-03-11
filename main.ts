@@ -1,6 +1,3 @@
-Anladım! Kodun karışmış — eski ve yeni kod üst üste yapıştırılmış. GitHub'da dosyayı aç ve **tümünü sil**, yerine şunu yapıştır:
-
-```typescript
 // ---------------------------
 // Telegram Translate Bot v2
 // ---------------------------
@@ -81,12 +78,4 @@ Deno.serve(async (req) => {
 
   return new Response("ok");
 });
-```
-
-Yapıştırdıktan sonra:
-1. GitHub'a kaydet (commit)
-2. Deno otomatik deploy eder
-3. Sonra webhook URL'ini güncelle — tarayıcıya şunu yaz:
-```
-
 ```
