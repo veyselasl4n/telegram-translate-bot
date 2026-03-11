@@ -1,17 +1,12 @@
-// ---------------------------
-// Telegram Translate Bot v2
-// ---------------------------
 import { franc } from "https://cdn.skypack.dev/franc@6.1.0";
 
 const BOT_TOKEN = Deno.env.get("BOT_TOKEN")!;
 const DEEPL_KEY = Deno.env.get("DEEPL_KEY")!;
 
-// Emoji veya sadece boşlukları ayıkla
 function onlyEmoji(text: string) {
   return /^[\p{Emoji}\s]+$/u.test(text);
 }
 
-// Basit dil algılama franc ile
 function detectLanguage(text: string): "TR" | "EN" {
   const lang = franc(text, { minLength: 3 });
   console.log("Detected lang:", lang);
@@ -19,7 +14,6 @@ function detectLanguage(text: string): "TR" | "EN" {
   return "TR";
 }
 
-// Deepl API çeviri fonksiyonu
 async function translate(text: string, target: string) {
   const res = await fetch("https://api-free.deepl.com/v2/translate", {
     method: "POST",
@@ -37,7 +31,6 @@ async function translate(text: string, target: string) {
   return data.translations?.[0]?.text ?? text;
 }
 
-// Telegram mesaj gönderme fonksiyonu
 async function sendMessage(chatId: number, text: string, reply: number) {
   await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
     method: "POST",
@@ -50,9 +43,6 @@ async function sendMessage(chatId: number, text: string, reply: number) {
   });
 }
 
-// ---------------------------
-// Deno Deploy server
-// ---------------------------
 Deno.serve(async (req) => {
   const url = new URL(req.url);
 
@@ -78,4 +68,3 @@ Deno.serve(async (req) => {
 
   return new Response("ok");
 });
-```
