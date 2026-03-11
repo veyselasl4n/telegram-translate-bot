@@ -1,13 +1,9 @@
+Anladım! Kodun karışmış — eski ve yeni kod üst üste yapıştırılmış. GitHub'da dosyayı aç ve **tümünü sil**, yerine şunu yapıştır:
+
+```typescript
 // ---------------------------
 // Telegram Translate Bot v2
 // ---------------------------
-Deno.serve(async (req) => {
-  const url = new URL(req.url);
-  
-  // Sadece /webhook path'ini kabul et
-  if (req.method !== "POST" || url.pathname !== "/webhook") 
-    return new Response("ok");
-
 import { franc } from "https://cdn.skypack.dev/franc@6.1.0";
 
 const BOT_TOKEN = Deno.env.get("BOT_TOKEN")!;
@@ -20,25 +16,27 @@ function onlyEmoji(text: string) {
 
 // Basit dil algılama franc ile
 function detectLanguage(text: string): "TR" | "EN" {
-  const lang = franc(text);
+  const lang = franc(text, { minLength: 3 });
   console.log("Detected lang:", lang);
-  if (lang === "tur") return "EN"; // Türkçe → İngilizce çevir
-  return "TR"; // Diğerleri → Türkçe çevir
+  if (lang === "tur") return "EN";
+  return "TR";
 }
 
 // Deepl API çeviri fonksiyonu
 async function translate(text: string, target: string) {
   const res = await fetch("https://api-free.deepl.com/v2/translate", {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `DeepL-Auth-Key ${DEEPL_KEY}`
+    },
     body: new URLSearchParams({
-      auth_key: DEEPL_KEY,
       text: text,
       target_lang: target
     })
   });
   const data = await res.json();
-  console.log("DEEPL response:", data); // debug
+  console.log("DEEPL response:", JSON.stringify(data));
   return data.translations?.[0]?.text ?? text;
 }
 
@@ -59,7 +57,10 @@ async function sendMessage(chatId: number, text: string, reply: number) {
 // Deno Deploy server
 // ---------------------------
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("ok");
+  const url = new URL(req.url);
+
+  if (req.method !== "POST" || url.pathname !== "/webhook")
+    return new Response("ok");
 
   let update;
   try { update = await req.json(); } catch { return new Response("ok"); }
@@ -67,7 +68,6 @@ Deno.serve(async (req) => {
   const msg = update.message;
   if (!msg) return new Response("ok");
 
-  // medya mesajlarını atla
   if (msg.animation || msg.sticker || msg.photo || msg.video || msg.document)
     return new Response("ok");
 
@@ -75,14 +75,18 @@ Deno.serve(async (req) => {
   if (!text) return new Response("ok");
   if (onlyEmoji(text)) return new Response("ok");
 
-  // dili algıla
   const target = detectLanguage(text);
-
-  // çeviri
   const translated = await translate(text, target);
-
-  // mesajı gönder
   await sendMessage(msg.chat.id, translated, msg.message_id);
 
   return new Response("ok");
 });
+```
+
+Yapıştırdıktan sonra:
+1. GitHub'a kaydet (commit)
+2. Deno otomatik deploy eder
+3. Sonra webhook URL'ini güncelle — tarayıcıya şunu yaz:
+```
+
+```
