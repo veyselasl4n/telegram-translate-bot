@@ -1,5 +1,6 @@
 const BOT_TOKEN = Deno.env.get("BOT_TOKEN")!;
 const DEEPL_KEY = Deno.env.get("DEEPL_KEY")!;
+const BOT_ID = 8486464185;
 
 function onlyEmoji(text: string) {
   return /^[\p{Emoji}\s]+$/u.test(text);
@@ -65,6 +66,7 @@ Deno.serve(async (req) => {
   if (!msg) return new Response("ok");
 
   // Botun kendi mesajlarını atla
+  if (msg.from?.id === BOT_ID) return new Response("ok");
   if (msg.from?.is_bot) return new Response("ok");
 
   if (msg.animation || msg.sticker || msg.photo || msg.video || msg.document)
@@ -76,7 +78,6 @@ Deno.serve(async (req) => {
 
   const translated = await detectAndTranslate(text);
 
-  // Çeviri orijinalle aynıysa gönderme
   if (translated.trim() === text.trim()) return new Response("ok");
 
   await sendMessage(msg.chat.id, translated, msg.message_id);
