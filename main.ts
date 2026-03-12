@@ -6,7 +6,6 @@ function onlyEmoji(text: string) {
 }
 
 async function detectAndTranslate(text: string) {
-  // Önce TR'ye çevir, detected_source_language ile dili öğren
   const res = await fetch("https://api-free.deepl.com/v2/translate", {
     method: "POST",
     headers: {
@@ -22,7 +21,6 @@ async function detectAndTranslate(text: string) {
   const detected = data.translations?.[0]?.detected_source_language;
   console.log("Detected language:", detected);
 
-  // Zaten Türkçeyse İngilizceye çevir
   if (detected === "TR") {
     const res2 = await fetch("https://api-free.deepl.com/v2/translate", {
       method: "POST",
@@ -36,12 +34,9 @@ async function detectAndTranslate(text: string) {
       })
     });
     const data2 = await res2.json();
-    console.log("EN response:", JSON.stringify(data2));
     return data2.translations?.[0]?.text ?? text;
   }
 
-  // Diğer dillerse TR çevirisini döndür
-  console.log("TR response:", JSON.stringify(data));
   return data.translations?.[0]?.text ?? text;
 }
 
@@ -69,6 +64,9 @@ Deno.serve(async (req) => {
   const msg = update.message;
   if (!msg) return new Response("ok");
 
+  // Botun kendi mesajlarını atla
+  if (msg.from?.is_bot) return new Response("ok");
+
   if (msg.animation || msg.sticker || msg.photo || msg.video || msg.document)
     return new Response("ok");
 
@@ -77,6 +75,10 @@ Deno.serve(async (req) => {
   if (onlyEmoji(text)) return new Response("ok");
 
   const translated = await detectAndTranslate(text);
+
+  // Çeviri orijinalle aynıysa gönderme
+  if (translated.trim() === text.trim()) return new Response("ok");
+
   await sendMessage(msg.chat.id, translated, msg.message_id);
 
   return new Response("ok");
