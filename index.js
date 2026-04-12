@@ -71,9 +71,7 @@ const server = http.createServer(async (req, res) => {
           const text = msg.text;
           if (text && !onlyEmoji(text)) {
             const translated = await detectAndTranslate(text);
-            if (translated.trim() !== text.trim()) {
-              await sendMessage(msg.chat.id, translated, msg.message_id);
-            }
+            await sendMessage(msg.chat.id, translated, msg.message_id);
           }
         }
       }
