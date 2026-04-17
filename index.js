@@ -17,13 +17,15 @@ function detectLanguage(text) {
 
 async function translateText(text, targetLang) {
   const body = new URLSearchParams();
-  body.append("auth_key", DEEPL_API_KEY);
   body.append("text", text);
   body.append("target_lang", targetLang);
 
   const res = await fetch(DEEPL_API, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": "DeepL-Auth-Key " + DEEPL_API_KEY
+    },
     body: body.toString()
   });
 
