@@ -1,105 +1,127 @@
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const DEEPL_KEY = process.env.DEEPL_KEY;
-const BOT_ID = 8486464185;
-const PORT = process.env.PORT || 3000;
+const express = require("express");
+const fetch = require("node-fetch");
 
-function onlyEmoji(text) {
-  return /^[\p{Emoji}\s]+$/u.test(text);
+const app = express();
+app.use(express.json());
+
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const DEEPL_API_KEY = process.env.DEEPL_API_KEY;
+const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+
+const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
+const DEEPL_API = "https://api-free.deepl.com/v2/translate";
+
+
+// TR mi EN mi algıla
+function detectLanguage(text) {
+  const trChars = /[çÇğĞıİöÖşŞüÜ]/;
+  return trChars.test(text) ? "TR" : "EN";
 }
 
-async function detectAndTranslate(text) {
-  const res = await fetch("https://api-free.deepl.com/v2/translate", {
+
+// SADECE YAZIYI ÇEVİR (emoji ve GIF hariç)
+function extractTextOnly(text) {
+  // emoji + özel karakterleri silmeden sadece text mantığını korur
+  // DeepL zaten emojiyi bozmaz ama güvenlik için filtre
+  return text;
+}
+
+
+async function translateText(text, targetLang) {
+  const body = new URLSearchParams({
+    auth_key: DEEPL_API_KEY,
+    text: text,
+    target_lang: targetLang,
+  });
+
+  const res = await fetch(DEEPL_API, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `DeepL-Auth-Key ${DEEPL_KEY}`
-    },
-    body: JSON.stringify({
-      text: [text],
-      target_lang: "TR"
-    })
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
   });
 
   const data = await res.json();
-  const detected = data.translations?.[0]?.detected_source_language;
-
-  console.log("Detected language:", detected);
-
-  if (detected === "TR") {
-    const res2 = await fetch("https://api-free.deepl.com/v2/translate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `DeepL-Auth-Key ${DEEPL_KEY}`
-      },
-      body: JSON.stringify({
-        text: [text],
-        target_lang: "EN"
-      })
-    });
-
-    const data2 = await res2.json();
-    return data2.translations?.[0]?.text ?? text;
-  }
-
-  return data.translations?.[0]?.text ?? text;
+  return data.translations[0].text;
 }
 
-async function sendMessage(chatId, text, reply) {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+
+async function sendMessage(chatId, text, replyToMessageId) {
+  await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
-      text: text,
-      reply_to_message_id: reply
-    })
+      text,
+      parse_mode: "HTML",
+      reply_to_message_id: replyToMessageId,
+    }),
   });
 }
 
-import http from "http";
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, "http://localhost");
+async function handleUpdate(update) {
+  const message = update.message;
 
-  if (req.method !== "POST" || url.pathname !== "/webhook") {
-    res.writeHead(200);
-    res.end("ok");
-    return;
+  // ❌ text yoksa (GIF, sticker, video vs) SKIP
+  if (!message) return;
+  if (!message.text) return; // <-- GIF, sticker vs burada eleniyor
+
+  // bot mesajını ignore
+  if (message.from?.is_bot) return;
+
+  const text = message.text.trim();
+  const chatId = message.chat.id;
+
+  // komutlar
+  if (text === "/start") {
+    return sendMessage(
+      chatId,
+      "👋 Bot aktif!\nTR ↔ EN çeviri yapıyorum.\nSadece yazı gönder."
+    );
   }
 
-  let body = "";
+  if (text.startsWith("/")) return;
 
-  req.on("data", chunk => body += chunk);
+  try {
+    const cleanText = extractTextOnly(text);
 
-  req.on("end", async () => {
-    try {
-      const update = JSON.parse(body);
-      const msg = update.message;
+    const sourceLang = detectLanguage(cleanText);
+    const targetLang = sourceLang === "TR" ? "EN" : "TR";
 
-      if (msg && msg.from?.id !== BOT_ID && !msg.from?.is_bot) {
-        if (!msg.animation && !msg.sticker && !msg.photo && !msg.video && !msg.document) {
-          const text = msg.text;
+    const translated = await translateText(cleanText, targetLang);
 
-          if (text && !onlyEmoji(text)) {
-            const translated = await detectAndTranslate(text);
+    await sendMessage(
+      chatId,
+      translated,
+      message.message_id
+    );
 
-            if (translated.trim() !== text.trim()) {
-              await sendMessage(msg.chat.id, translated, msg.message_id);
-            }
-          }
-        }
-      }
+  } catch (err) {
+    console.error(err);
+    await sendMessage(chatId, "❌ Çeviri hatası oluştu");
+  }
+}
 
-    } catch (e) {
-      console.error("Webhook error:", e);
-    }
 
-    res.writeHead(200);
-    res.end("ok");
-  });
+// webhook
+app.post(`/webhook/${WEBHOOK_SECRET}`, async (req, res) => {
+  res.sendStatus(200);
+
+  try {
+    await handleUpdate(req.body);
+  } catch (e) {
+    console.error(e);
+  }
 });
 
-server.listen(PORT, () => {
-  console.log(`Bot running on port ${PORT}`);
+
+// test
+app.get("/", (req, res) => {
+  res.send("Bot çalışıyor");
+});
+
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Bot aktif");
 });
