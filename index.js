@@ -1,7 +1,6 @@
 const express = require("express");
-co
-
 const app = express();
+
 app.use(express.json());
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -11,117 +10,98 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const DEEPL_API = "https://api-free.deepl.com/v2/translate";
 
-
-// TR mi EN mi algıla
+// Dil tespiti
 function detectLanguage(text) {
   const trChars = /[çÇğĞıİöÖşŞüÜ]/;
   return trChars.test(text) ? "TR" : "EN";
 }
 
-
-// SADECE YAZIYI ÇEVİR (emoji ve GIF hariç)
-function extractTextOnly(text) {
-  // emoji + özel karakterleri silmeden sadece text mantığını korur
-  // DeepL zaten emojiyi bozmaz ama güvenlik için filtre
-  return text;
-}
-
-
+// DeepL çeviri
 async function translateText(text, targetLang) {
   const body = new URLSearchParams({
     auth_key: DEEPL_API_KEY,
-    text: text,
-    target_lang: targetLang,
+    text,
+    target_lang: targetLang
   });
 
   const res = await fetch(DEEPL_API, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
+    body: body.toString()
   });
 
   const data = await res.json();
-  return data.translations[0].text;
+  return data.translations?.[0]?.text || text;
 }
 
+// Telegram mesaj
+async function sendMessage(chatId, text, replyToMessageId = null) {
+  const payload = {
+    chat_id: chatId,
+    text,
+    parse_mode: "HTML"
+  };
 
-async function sendMessage(chatId, text, replyToMessageId) {
+  if (replyToMessageId) {
+    payload.reply_to_message_id = replyToMessageId;
+  }
+
   await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text,
-      parse_mode: "HTML",
-      reply_to_message_id: replyToMessageId,
-    }),
+    body: JSON.stringify(payload)
   });
 }
 
-
+// update handler
 async function handleUpdate(update) {
   const message = update.message;
-
-  // ❌ text yoksa (GIF, sticker, video vs) SKIP
-  if (!message) return;
-  if (!message.text) return; // <-- GIF, sticker vs burada eleniyor
-
-  // bot mesajını ignore
+  if (!message || !message.text) return;
   if (message.from?.is_bot) return;
 
   const text = message.text.trim();
   const chatId = message.chat.id;
+  const messageId = message.message_id;
 
-  // komutlar
   if (text === "/start") {
-    return sendMessage(
-      chatId,
-      "👋 Bot aktif!\nTR ↔ EN çeviri yapıyorum.\nSadece yazı gönder."
-    );
+    return sendMessage(chatId, "Merhaba 👋 çeviri botu hazır.");
+  }
+
+  if (text === "/help") {
+    return sendMessage(chatId, "TR ↔ EN otomatik çeviri botu.");
   }
 
   if (text.startsWith("/")) return;
 
   try {
-    const cleanText = extractTextOnly(text);
-
-    const sourceLang = detectLanguage(cleanText);
+    const sourceLang = detectLanguage(text);
     const targetLang = sourceLang === "TR" ? "EN" : "TR";
 
-    const translated = await translateText(cleanText, targetLang);
+    const translated = await translateText(text, targetLang);
 
-    await sendMessage(
-      chatId,
-      translated,
-      message.message_id
-    );
-
+    await sendMessage(chatId, translated, messageId);
   } catch (err) {
     console.error(err);
-    await sendMessage(chatId, "❌ Çeviri hatası oluştu");
+    await sendMessage(chatId, "Çeviri hatası ❌", messageId);
   }
 }
-
 
 // webhook
 app.post(`/webhook/${WEBHOOK_SECRET}`, async (req, res) => {
   res.sendStatus(200);
-
   try {
     await handleUpdate(req.body);
   } catch (e) {
-    console.error(e);
+    console.error("Webhook error:", e);
   }
 });
 
-
-// test
+// health
 app.get("/", (req, res) => {
-  res.send("Bot çalışıyor");
+  res.send("bot aktif");
 });
-
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Bot aktif");
+  console.log("Bot çalışıyor:", PORT);
 });
