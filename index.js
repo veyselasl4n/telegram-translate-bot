@@ -10,142 +10,142 @@ const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 const TELEGRAM_API = “https://api.telegram.org/bot” + BOT_TOKEN;
 const DEEPL_API = “https://api-free.deepl.com/v2/translate”;
 
-// Sevgi sözcükleri - çeviri öncesi manuel map
-const TERM_OF_ENDEARMENT_MAP = {
-// TR -> EN
-“aşkım”: “my love”,
-“aşkı”: “my love”,
-“bebeğim”: “my baby”,
-“bebeği”: “my baby”,
-“kalbim”: “my heart”,
-“meleğim”: “my angel”,
-“canım”: “my dear”,
-“tatlım”: “my sweet”,
-“hayatım”: “my life”,
-“güzelim”: “my beautiful”,
-“sevgilim”: “my darling”,
-“birtanem”: “my one and only”,
-“bir tanem”: “my one and only”,
-“prensesim”: “my princess”,
-“prensim”: “my prince”,
-“aslanım”: “my lion”,
-// EN -> TR
-“babe”: “bebeğim”,
-“baby”: “bebeğim”,
-“honey”: “tatlım”,
-“sweetheart”: “canım”,
-“sweetie”: “tatlım”,
-“darling”: “sevgilim”,
-“my love”: “aşkım”,
-“my angel”: “meleğim”,
-“my heart”: “kalbim”,
-“my dear”: “canım”,
-“my baby”: “bebeğim”,
-“my sweet”: “tatlım”,
-“my life”: “hayatım”,
-“my beautiful”: “güzelim”,
-“my darling”: “sevgilim”,
-“my princess”: “prensesim”,
-“my prince”: “prensim”,
-};
+var ENDEARMENTS = [
+{ from: “bir tanem”, to: “my one and only”, lang: “TR” },
+{ from: “birtanem”, to: “my one and only”, lang: “TR” },
+{ from: “sevgilim”, to: “my darling”, lang: “TR” },
+{ from: “prensesim”, to: “my princess”, lang: “TR” },
+{ from: “prensim”, to: “my prince”, lang: “TR” },
+{ from: “bebegim”, to: “my baby”, lang: “TR” },
+{ from: “melegim”, to: “my angel”, lang: “TR” },
+{ from: “kalbim”, to: “my heart”, lang: “TR” },
+{ from: “hayatim”, to: “my life”, lang: “TR” },
+{ from: “guzelim”, to: “my beautiful”, lang: “TR” },
+{ from: “aslanim”, to: “my lion”, lang: “TR” },
+{ from: “tatlim”, to: “my sweet”, lang: “TR” },
+{ from: “canim”, to: “my dear”, lang: “TR” },
+{ from: “askim”, to: “my love”, lang: “TR” },
+{ from: “my one and only”, to: “bir tanem”, lang: “EN” },
+{ from: “my beautiful”, to: “guzelim”, lang: “EN” },
+{ from: “my princess”, to: “prensesim”, lang: “EN” },
+{ from: “my darling”, to: “sevgilim”, lang: “EN” },
+{ from: “sweetheart”, to: “canim”, lang: “EN” },
+{ from: “my prince”, to: “prensim”, lang: “EN” },
+{ from: “my heart”, to: “kalbim”, lang: “EN” },
+{ from: “my angel”, to: “melegim”, lang: “EN” },
+{ from: “my sweet”, to: “tatlim”, lang: “EN” },
+{ from: “my life”, to: “hayatim”, lang: “EN” },
+{ from: “my love”, to: “askim”, lang: “EN” },
+{ from: “my baby”, to: “bebegim”, lang: “EN” },
+{ from: “my dear”, to: “canim”, lang: “EN” },
+{ from: “sweetie”, to: “tatlim”, lang: “EN” },
+{ from: “darling”, to: “sevgilim”, lang: “EN” },
+{ from: “honey”, to: “tatlim”, lang: “EN” },
+{ from: “babe”, to: “bebegim”, lang: “EN” },
+{ from: “baby”, to: “bebegim”, lang: “EN” },
+];
 
-// Sadece emoji/gif içeren mesajı algıla - çevirme
-function isOnlyEmojiOrMedia(text) {
-// Telegram GIF/sticker mesajları zaten text olmaz ama yine de kontrol
-// Emoji-only kontrolü: tüm karakterler emoji veya boşluk mu?
-const stripped = text.replace(/[\s\n]/g, “”);
+function isOnlyEmoji(text) {
+var stripped = text.replace(/\s/g, “”);
 if (!stripped) return true;
-
-// Unicode emoji regex
-const emojiRegex = /^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27FF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FEFF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FAFF}❤️‍🔥\u200d\uFE0F\u20E3\u{E0000}-\u{E007F}]+$/u;
-return emojiRegex.test(stripped);
+var i = 0;
+var hasEmoji = false;
+while (i < stripped.length) {
+var code = stripped.codePointAt(i);
+var isEmoji = (
+(code >= 0x1F000 && code <= 0x1FFFF) ||
+(code >= 0x2600 && code <= 0x27FF) ||
+(code >= 0x2300 && code <= 0x23FF) ||
+(code >= 0x2B00 && code <= 0x2BFF) ||
+(code >= 0xFE00 && code <= 0xFEFF) ||
+(code >= 0x1F900 && code <= 0x1F9FF) ||
+(code >= 0x1FA00 && code <= 0x1FAFF) ||
+code === 0x200D ||
+code === 0xFE0F ||
+code === 0x20E3 ||
+code === 0x2764
+);
+if (!isEmoji) return false;
+hasEmoji = true;
+i += (code > 0xFFFF) ? 2 : 1;
+}
+return hasEmoji;
 }
 
-// Gelişmiş dil tespiti
 function detectLanguage(text) {
-// Türkçe’ye özgü karakterler
-const trSpecificChars = /[çÇğĞıİöÖşŞüÜ]/;
-if (trSpecificChars.test(text)) return “TR”;
+// Turkce ozel karakterler (unicode escape ile)
+var trChars = /[\u00e7\u00c7\u011f\u011e\u0131\u0130\u00f6\u00d6\u015f\u015e\u00fc\u00dc]/;
+if (trChars.test(text)) return “TR”;
 
-// Türkçe’ye özgü kelimeler (karaktersiz yazılmış olabilir)
-const trWords = /\b(bir|bu|ve|ile|ama|da|de|ki|mi|mu|mü|ne|nasil|nasıl|neden|gibi|diye|icin|için|ise|bile|hep|cok|çok|iyi|kötü|kotu|evet|hayir|tamam|benim|senin|onun|bizim|sizin|onların|bana|sana|ona|bizi|sizi|onlari|ben|sen|biz|siz|onu|ama|fakat|lakin|yani|artik|artık|simdi|şimdi|zaten|hala|hâlâ|daha|sonra|once|önce|belki|mutlaka|tabii|tabi|elbette|hersey|herşey|hicbir|hiçbir|nerede|nereye|nereden|hangi|kadar|fazla|az|cok|çok|en|ile|veya|yoksa)\b/i;
-if (trWords.test(text)) return “TR”;
+var lower = text.toLowerCase();
+var trWords = [
+“bir”, “bu”, “ve”, “ile”, “ama”, “fakat”,
+“da”, “de”, “ki”, “mi”, “ne”, “nasil”,
+“neden”, “gibi”, “diye”, “icin”, “ise”,
+“bile”, “hep”, “iyi”, “evet”, “hayir”,
+“tamam”, “benim”, “senin”, “onun”, “bana”,
+“sana”, “bizi”, “sizi”, “ben”, “sen”, “biz”,
+“siz”, “yani”, “simdi”, “zaten”, “hala”,
+“daha”, “sonra”, “once”, “belki”, “tabii”,
+“hersey”, “nerede”, “hangi”, “kadar”,
+“fazla”, “veya”, “yoksa”, “degil”, “olan”,
+“oldu”, “olur”, “olsa”, “gitti”, “geldi”,
+“sever”, “istiyor”, “yapti”, “yapmaz”
+];
+
+var words = lower.split(/\s+/);
+for (var i = 0; i < words.length; i++) {
+var w = words[i].replace(/[^a-z]/g, “”);
+if (trWords.indexOf(w) !== -1) return “TR”;
+}
 
 return “EN”;
 }
 
-// Sevgi sözcüklerini koru: çeviri öncesi placeholder ile değiştir, sonra geri koy
-function applyEndearmentMap(text, sourceLang) {
-let result = text;
-const placeholders = {};
-let idx = 0;
-
-// Kaynak dile göre hangi kelimeleri arayacağımızı belirle
-const entries = Object.entries(TERM_OF_ENDEARMENT_MAP).filter(([key]) => {
-if (sourceLang === “TR”) {
-// Türkçe kaynaktan EN’e gidecek - TR kelimeleri ara
-return /[a-zçğışöüA-ZÇĞİŞÖÜ]/.test(key) && !/\s/.test(key) || /\s/.test(key);
-} else {
-// İngilizce kaynaktan TR’ye gidecek - EN kelimeleri ara
-return /^[a-zA-Z\s]+$/.test(key);
+function escapeRegex(str) {
+return str.replace(/[-.*+?^${}()|[]\]/g, “\$&”);
 }
-});
 
-// Uzun ifadeleri önce işle (örn: “my love” önce, “love” sonra)
-const sorted = entries.sort((a, b) => b[0].length - a[0].length);
+function replaceEndearments(text, sourceLang) {
+var result = text;
+var map = {};
+var idx = 0;
 
-for (const [term, replacement] of sorted) {
-const regex = new RegExp(`\\b${escapeRegex(term)}\\b`, “gi”);
-result = result.replace(regex, (match) => {
-const placeholder = `__ENDEARMENT_${idx}__`;
-placeholders[placeholder] = replacement;
+var filtered = ENDEARMENTS.filter(function(e) { return e.lang === sourceLang; });
+
+for (var i = 0; i < filtered.length; i++) {
+var entry = filtered[i];
+var testRegex = new RegExp(escapeRegex(entry.from), “gi”);
+if (testRegex.test(result)) {
+var placeholder = “XENDX” + idx + “X”;
+map[placeholder] = entry.to;
+result = result.replace(new RegExp(escapeRegex(entry.from), “gi”), placeholder);
 idx++;
-return placeholder;
-});
+}
 }
 
-return { text: result, placeholders };
+return { text: result, map: map };
 }
 
-function restorePlaceholders(text, placeholders) {
-let result = text;
-for (const [placeholder, value] of Object.entries(placeholders)) {
-result = result.replace(new RegExp(escapeRegex(placeholder), “g”), value);
+function restoreEndearments(text, map) {
+var result = text;
+var keys = Object.keys(map);
+for (var i = 0; i < keys.length; i++) {
+result = result.replace(new RegExp(keys[i], “g”), map[keys[i]]);
 }
 return result;
 }
 
-function escapeRegex(str) {
-return str.replace(/[.*+?^${}()|[]\]/g, “\$&”);
-}
-
-// Zamir belirsizliği için context hint ekle
-function buildTranslationPrompt(text, sourceLang) {
-if (sourceLang === “TR”) {
-// Türkçe’de özne genellikle fiilden anlaşılır.
-// DeepL’e context vermek için system prompt ekleyemeyiz ama
-// metni küçük bir not ile sarabilir ya da olduğu gibi bırakabiliriz.
-// En iyi yaklaşım: DeepL context parametresi (Pro’da var, free’de yok)
-// Bu yüzden metni biraz normalize edelim
-return text;
-}
-return text;
-}
-
 async function translateText(text, targetLang, sourceLang) {
-const processedText = buildTranslationPrompt(text, sourceLang);
-
-const body = new URLSearchParams();
-body.append(“text”, processedText);
+var body = new URLSearchParams();
+body.append(“text”, text);
 body.append(“target_lang”, targetLang);
-// Kaynak dili de belirt - DeepL’in tahmin etmesine bırakma
 body.append(“source_lang”, sourceLang);
-// Formality: Türkçe için informal tercih et (sevgi dili genelde informal)
 if (targetLang === “TR”) {
 body.append(“formality”, “prefer_less”);
 }
 
-const res = await fetch(DEEPL_API, {
+var res = await fetch(DEEPL_API, {
 method: “POST”,
 headers: {
 “Content-Type”: “application/x-www-form-urlencoded”,
@@ -154,84 +154,75 @@ headers: {
 body: body.toString()
 });
 
-const data = await res.json();
+var data = await res.json();
 console.log(“DeepL:”, JSON.stringify(data));
 
 if (!data.translations || !data.translations[0]) {
-throw new Error(“DeepL translation failed: “ + JSON.stringify(data));
+throw new Error(“DeepL error: “ + JSON.stringify(data));
 }
 
 return data.translations[0].text;
 }
 
 async function sendMessage(chatId, text, replyId) {
-const payload = { chat_id: chatId, text: text };
+var payload = { chat_id: chatId, text: text };
 if (replyId) payload.reply_to_message_id = replyId;
 
-const res = await fetch(TELEGRAM_API + “/sendMessage”, {
+var res = await fetch(TELEGRAM_API + “/sendMessage”, {
 method: “POST”,
 headers: { “Content-Type”: “application/json” },
 body: JSON.stringify(payload)
 });
 
-const data = await res.json();
+var data = await res.json();
 console.log(“Telegram:”, JSON.stringify(data));
 }
 
 async function handleUpdate(update) {
 console.log(“Update:”, JSON.stringify(update));
 
-const message = update.message;
+var message = update.message;
 if (!message) return;
 if (message.from && message.from.is_bot) return;
-
-// Sticker, GIF, fotoğraf gibi media - text yoksa geç
 if (!message.text) return;
 
-const text = message.text.trim();
-const chatId = message.chat.id;
-const messageId = message.message_id;
+var text = message.text.trim();
+var chatId = message.chat.id;
+var messageId = message.message_id;
 
-// Komutlar
 if (text === “/start”) {
-await sendMessage(chatId, “Merhaba! Çeviri botu hazır. TR↔EN otomatik çeviri yapar.”);
+await sendMessage(chatId, “Merhaba! Ceviri botu hazir. TR-EN otomatik ceviri yapar.”);
 return;
 }
 
 if (text === “/help”) {
-await sendMessage(chatId, “TR ↔ EN otomatik çeviri botu.\nTürkçe yazarsanız İngilizce’ye, İngilizce yazarsanız Türkçe’ye çevirir.”);
+await sendMessage(chatId, “TR - EN otomatik ceviri botu.”);
 return;
 }
 
 if (text.startsWith(”/”)) return;
 
-// Sadece emoji içeriyorsa çevirme
-if (isOnlyEmojiOrMedia(text)) {
-console.log(“Emoji-only mesaj, atlanıyor.”);
+if (isOnlyEmoji(text)) {
+console.log(“Emoji-only, skip.”);
 return;
 }
 
 try {
-const sourceLang = detectLanguage(text);
-const targetLang = sourceLang === “TR” ? “EN” : “TR”;
-console.log(“Translating from “ + sourceLang + “ to “ + targetLang + “: “ + text);
+var sourceLang = detectLanguage(text);
+var targetLang = sourceLang === “TR” ? “EN” : “TR”;
+console.log(“Lang: “ + sourceLang + “ -> “ + targetLang + “ | “ + text);
 
 ```
-// Sevgi sözcüklerini koru
-const { text: processedText, placeholders } = applyEndearmentMap(text, sourceLang);
-
-// Çevir
-let translated = await translateText(processedText, targetLang, sourceLang);
-
-// Placeholder'ları geri koy
-translated = restorePlaceholders(translated, placeholders);
+var replaced = replaceEndearments(text, sourceLang);
+var translated = await translateText(replaced.text, targetLang, sourceLang);
+translated = restoreEndearments(translated, replaced.map);
 
 await sendMessage(chatId, translated, messageId);
 ```
 
 } catch (err) {
 console.error(“Hata:”, err);
-await sendMessage(chatId, “Çeviri hatası oluştu.”, messageId);
+await sendMessage(chatId, “Ceviri hatasi.”, messageId);
 }
 }
 
@@ -248,7 +239,7 @@ app.get(”/”, function(req, res) {
 res.send(“bot aktif”);
 });
 
-const PORT = process.env.PORT || 3000;
+var PORT = process.env.PORT || 3000;
 app.listen(PORT, function() {
-console.log(“Bot çalışıyor: “ + PORT);
+console.log(“Bot calisiyor: “ + PORT);
 });
