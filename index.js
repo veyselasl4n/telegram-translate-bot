@@ -1,14 +1,12 @@
-const express = require(“express”);
-const app = express();
-
+var express = require(“express”);
+var app = express();
 app.use(express.json());
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const DEEPL_API_KEY = process.env.DEEPL_API_KEY;
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
-
-const TELEGRAM_API = “https://api.telegram.org/bot” + BOT_TOKEN;
-const DEEPL_API = “https://api-free.deepl.com/v2/translate”;
+var BOT_TOKEN = process.env.BOT_TOKEN;
+var DEEPL_API_KEY = process.env.DEEPL_API_KEY;
+var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+var TELEGRAM_API = “https://api.telegram.org/bot” + BOT_TOKEN;
+var DEEPL_API = “https://api-free.deepl.com/v2/translate”;
 
 var ENDEARMENTS = [
 { from: “bir tanem”, to: “my one and only”, lang: “TR” },
@@ -42,7 +40,7 @@ var ENDEARMENTS = [
 { from: “darling”, to: “sevgilim”, lang: “EN” },
 { from: “honey”, to: “tatlim”, lang: “EN” },
 { from: “babe”, to: “bebegim”, lang: “EN” },
-{ from: “baby”, to: “bebegim”, lang: “EN” },
+{ from: “baby”, to: “bebegim”, lang: “EN” }
 ];
 
 function isOnlyEmoji(text) {
@@ -52,20 +50,16 @@ var i = 0;
 var hasEmoji = false;
 while (i < stripped.length) {
 var code = stripped.codePointAt(i);
-var isEmoji = (
-(code >= 0x1F000 && code <= 0x1FFFF) ||
+var ok = (code >= 0x1F000 && code <= 0x1FFFF) ||
 (code >= 0x2600 && code <= 0x27FF) ||
 (code >= 0x2300 && code <= 0x23FF) ||
 (code >= 0x2B00 && code <= 0x2BFF) ||
 (code >= 0xFE00 && code <= 0xFEFF) ||
 (code >= 0x1F900 && code <= 0x1F9FF) ||
 (code >= 0x1FA00 && code <= 0x1FAFF) ||
-code === 0x200D ||
-code === 0xFE0F ||
-code === 0x20E3 ||
-code === 0x2764
-);
-if (!isEmoji) return false;
+code === 0x200D || code === 0xFE0F ||
+code === 0x20E3 || code === 0x2764;
+if (!ok) return false;
 hasEmoji = true;
 i += (code > 0xFFFF) ? 2 : 1;
 }
@@ -73,32 +67,21 @@ return hasEmoji;
 }
 
 function detectLanguage(text) {
-// Turkce ozel karakterler (unicode escape ile)
 var trChars = /[\u00e7\u00c7\u011f\u011e\u0131\u0130\u00f6\u00d6\u015f\u015e\u00fc\u00dc]/;
 if (trChars.test(text)) return “TR”;
-
 var lower = text.toLowerCase();
-var trWords = [
-“bir”, “bu”, “ve”, “ile”, “ama”, “fakat”,
-“da”, “de”, “ki”, “mi”, “ne”, “nasil”,
-“neden”, “gibi”, “diye”, “icin”, “ise”,
-“bile”, “hep”, “iyi”, “evet”, “hayir”,
-“tamam”, “benim”, “senin”, “onun”, “bana”,
-“sana”, “bizi”, “sizi”, “ben”, “sen”, “biz”,
-“siz”, “yani”, “simdi”, “zaten”, “hala”,
-“daha”, “sonra”, “once”, “belki”, “tabii”,
-“hersey”, “nerede”, “hangi”, “kadar”,
-“fazla”, “veya”, “yoksa”, “degil”, “olan”,
-“oldu”, “olur”, “olsa”, “gitti”, “geldi”,
-“sever”, “istiyor”, “yapti”, “yapmaz”
-];
-
+var trWords = [“bir”,“bu”,“ve”,“ile”,“ama”,“fakat”,“da”,“de”,“ki”,“mi”,
+“ne”,“nasil”,“neden”,“gibi”,“diye”,“icin”,“ise”,“bile”,“hep”,“iyi”,
+“evet”,“hayir”,“tamam”,“benim”,“senin”,“onun”,“bana”,“sana”,“bizi”,
+“sizi”,“ben”,“sen”,“biz”,“siz”,“yani”,“simdi”,“zaten”,“hala”,“daha”,
+“sonra”,“once”,“belki”,“tabii”,“hersey”,“nerede”,“hangi”,“kadar”,
+“fazla”,“veya”,“yoksa”,“degil”,“olan”,“oldu”,“olur”,“olsa”,“gitti”,
+“geldi”,“sever”,“istiyor”,“yapti”,“yapmaz”];
 var words = lower.split(/\s+/);
 for (var i = 0; i < words.length; i++) {
 var w = words[i].replace(/[^a-z]/g, “”);
 if (trWords.indexOf(w) !== -1) return “TR”;
 }
-
 return “EN”;
 }
 
@@ -110,20 +93,20 @@ function replaceEndearments(text, sourceLang) {
 var result = text;
 var map = {};
 var idx = 0;
-
-var filtered = ENDEARMENTS.filter(function(e) { return e.lang === sourceLang; });
-
-for (var i = 0; i < filtered.length; i++) {
-var entry = filtered[i];
-var testRegex = new RegExp(escapeRegex(entry.from), “gi”);
-if (testRegex.test(result)) {
+var filtered = [];
+for (var i = 0; i < ENDEARMENTS.length; i++) {
+if (ENDEARMENTS[i].lang === sourceLang) filtered.push(ENDEARMENTS[i]);
+}
+for (var j = 0; j < filtered.length; j++) {
+var entry = filtered[j];
+var pattern = new RegExp(escapeRegex(entry.from), “gi”);
+if (pattern.test(result)) {
 var placeholder = “XENDX” + idx + “X”;
 map[placeholder] = entry.to;
 result = result.replace(new RegExp(escapeRegex(entry.from), “gi”), placeholder);
 idx++;
 }
 }
-
 return { text: result, map: map };
 }
 
@@ -141,9 +124,7 @@ var body = new URLSearchParams();
 body.append(“text”, text);
 body.append(“target_lang”, targetLang);
 body.append(“source_lang”, sourceLang);
-if (targetLang === “TR”) {
-body.append(“formality”, “prefer_less”);
-}
+if (targetLang === “TR”) body.append(“formality”, “prefer_less”);
 
 var res = await fetch(DEEPL_API, {
 method: “POST”,
@@ -153,34 +134,26 @@ headers: {
 },
 body: body.toString()
 });
-
 var data = await res.json();
 console.log(“DeepL:”, JSON.stringify(data));
-
-if (!data.translations || !data.translations[0]) {
-throw new Error(“DeepL error: “ + JSON.stringify(data));
-}
-
+if (!data.translations || !data.translations[0]) throw new Error(“DeepL error”);
 return data.translations[0].text;
 }
 
 async function sendMessage(chatId, text, replyId) {
 var payload = { chat_id: chatId, text: text };
 if (replyId) payload.reply_to_message_id = replyId;
-
 var res = await fetch(TELEGRAM_API + “/sendMessage”, {
 method: “POST”,
 headers: { “Content-Type”: “application/json” },
 body: JSON.stringify(payload)
 });
-
 var data = await res.json();
 console.log(“Telegram:”, JSON.stringify(data));
 }
 
 async function handleUpdate(update) {
 console.log(“Update:”, JSON.stringify(update));
-
 var message = update.message;
 if (!message) return;
 if (message.from && message.from.is_bot) return;
@@ -191,35 +164,24 @@ var chatId = message.chat.id;
 var messageId = message.message_id;
 
 if (text === “/start”) {
-await sendMessage(chatId, “Merhaba! Ceviri botu hazir. TR-EN otomatik ceviri yapar.”);
+await sendMessage(chatId, “Merhaba! TR-EN otomatik ceviri botu.”);
 return;
 }
-
 if (text === “/help”) {
-await sendMessage(chatId, “TR - EN otomatik ceviri botu.”);
+await sendMessage(chatId, “TR-EN otomatik ceviri botu.”);
 return;
 }
-
 if (text.startsWith(”/”)) return;
-
-if (isOnlyEmoji(text)) {
-console.log(“Emoji-only, skip.”);
-return;
-}
+if (isOnlyEmoji(text)) { console.log(“emoji-only skip”); return; }
 
 try {
 var sourceLang = detectLanguage(text);
 var targetLang = sourceLang === “TR” ? “EN” : “TR”;
 console.log(“Lang: “ + sourceLang + “ -> “ + targetLang + “ | “ + text);
-
-```
 var replaced = replaceEndearments(text, sourceLang);
 var translated = await translateText(replaced.text, targetLang, sourceLang);
 translated = restoreEndearments(translated, replaced.map);
-
 await sendMessage(chatId, translated, messageId);
-```
-
 } catch (err) {
 console.error(“Hata:”, err);
 await sendMessage(chatId, “Ceviri hatasi.”, messageId);
@@ -228,18 +190,10 @@ await sendMessage(chatId, “Ceviri hatasi.”, messageId);
 
 app.post(”/webhook/” + WEBHOOK_SECRET, async function(req, res) {
 res.status(200).json({ ok: true });
-try {
-await handleUpdate(req.body);
-} catch (e) {
-console.error(“Webhook error:”, e);
-}
+try { await handleUpdate(req.body); } catch (e) { console.error(e); }
 });
 
-app.get(”/”, function(req, res) {
-res.send(“bot aktif”);
-});
+app.get(”/”, function(req, res) { res.send(“bot aktif”); });
 
 var PORT = process.env.PORT || 3000;
-app.listen(PORT, function() {
-console.log(“Bot calisiyor: “ + PORT);
-});
+app.listen(PORT, function() { console.log(“Bot calisiyor: “ + PORT); });
