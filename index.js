@@ -8,6 +8,9 @@ var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 
+// Hafıza: { 'kullanici_mesaj_id': 'bot_mesaj_id' }
+var messageMap = {};
+
 var ENDEARMENTS = [
   { from: "bir tanem", to: "my one and only", lang: "TR" },
   { from: "birtanem", to: "my one and only", lang: "TR" },
@@ -46,28 +49,22 @@ var ENDEARMENTS = [
 function isOnlyEmoji(text) {
   var stripped = text.replace(/\s/g, "");
   if (!stripped) return true;
-  // Emoji kontrolü (basitleştirilmiş)
   var emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
   return emojiRegex.test(stripped);
 }
 
 function detectLanguage(text) {
   var trChars = /[\u00e7\u00c7\u011f\u011e\u0131\u0130\u00f6\u00d6\u015f\u015e\u00fc\u00dc]/;
-  if (trChars.test(text)) return "TR";
-  return "EN";
+  return trChars.test(text) ? "TR" : "EN";
 }
 
-function escapeRegex(str) {
-  return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&");
-}
+function escapeRegex(str) { return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"); }
 
 function replaceEndearments(text, sourceLang) {
   var result = text;
   var map = {};
   var idx = 0;
-  var filtered = ENDEARMENTS.filter(e => e.lang === sourceLang);
-  
-  filtered.forEach(entry => {
+  ENDEARMENTS.filter(e => e.lang === sourceLang).forEach(entry => {
     var pattern = new RegExp("\\b" + escapeRegex(entry.from) + "\\b", "gi");
     if (pattern.test(result)) {
       var placeholder = "XENDX" + idx + "X";
@@ -81,9 +78,7 @@ function replaceEndearments(text, sourceLang) {
 
 function restoreEndearments(text, map) {
   var result = text;
-  for (var key in map) {
-    result = result.replace(new RegExp(key, "g"), map[key]);
-  }
+  for (var key in map) result = result.replace(new RegExp(key, "g"), map[key]);
   return result;
 }
 
@@ -96,28 +91,26 @@ async function translateText(text, targetLang, sourceLang) {
 
   var res = await fetch(DEEPL_API, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "Authorization": "DeepL-Auth-Key " + DEEPL_API_KEY
-    },
+    headers: { "Content-Type": "application/x-www-form-urlencoded", "Authorization": "DeepL-Auth-Key " + DEEPL_API_KEY },
     body: body.toString()
   });
   var data = await res.json();
   return data.translations[0].text;
 }
 
-async function sendMessage(chatId, text, replyId) {
-  var payload = { chat_id: chatId, text: text };
-  if (replyId) payload.reply_to_message_id = replyId;
-  await fetch(TELEGRAM_API + "/sendMessage", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+// Bot mesaj gönderdiğinde ID'sini hafızaya kaydediyoruz
+async function sendMessage(chatId, text, originalMessageId) {
+  var payload = { chat_id: chatId, text: text, reply_to_message_id: originalMessageId };
+  var res = await fetch(TELEGRAM_API + "/sendMessage", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
   });
+  var data = await res.json();
+  if (data.ok) messageMap[originalMessageId] = data.result.message_id;
 }
 
 async function handleUpdate(update) {
-  var message = update.message;
+  // Hem normal hem de düzenlenen mesajları al
+  var message = update.message || update.edited_message;
   if (!message || !message.text) return;
 
   var text = message.text.trim();
@@ -125,11 +118,10 @@ async function handleUpdate(update) {
   var messageId = message.message_id;
 
   if (text === "/start" || text === "/help") {
-    await sendMessage(chatId, "TR-EN otomatik çeviri botu.");
+    await sendMessage(chatId, "TR-EN otomatik çeviri botu.", messageId);
     return;
   }
-  if (text.startsWith("/")) return;
-  if (isOnlyEmoji(text)) return;
+  if (text.startsWith("/") || isOnlyEmoji(text)) return;
 
   try {
     var sourceLang = detectLanguage(text);
@@ -137,10 +129,18 @@ async function handleUpdate(update) {
     var replaced = replaceEndearments(text, sourceLang);
     var translated = await translateText(replaced.text, targetLang, sourceLang);
     translated = restoreEndearments(translated, replaced.map);
-    await sendMessage(chatId, translated, messageId);
-  } catch (err) {
-    console.error("Hata:", err);
-  }
+
+    // Mesaj daha önce gönderildiyse (düzenleme varsa) GÜNCELLE
+    if (update.edited_message && messageMap[messageId]) {
+      await fetch(TELEGRAM_API + "/editMessageText", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, message_id: messageMap[messageId], text: translated })
+      });
+    } else {
+      // Yeni mesaj ise gönder
+      await sendMessage(chatId, translated, messageId);
+    }
+  } catch (err) { console.error("Hata:", err); }
 }
 
 app.post("/webhook/" + WEBHOOK_SECRET, async function(req, res) {
@@ -150,5 +150,5 @@ app.post("/webhook/" + WEBHOOK_SECRET, async function(req, res) {
 
 app.get("/", function(req, res) { res.send("Bot aktif"); });
 
-var PORT = process.env.PORT || 3000;
-app.listen(PORT, function() { console.log("Bot çalışıyor: " + PORT); });
+var PORT = process.env.PORT || 8080;
+app.listen(PORT, '0.0.0.0', function() { console.log("Bot çalışıyor: " + PORT); });
