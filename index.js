@@ -16,6 +16,11 @@ var CHAT_LANG_PAIRS = {
   "-1003747833985": { lang1: "TR", lang2: "RU" }
 };
 
+// Zorla dil atanmış kullanıcılar
+var USER_FORCE_LANGS = {
+  "7698639353": { source: "TR", target: "RU" }
+};
+
 var messageMap = {};
 
 var ENDEARMENTS = [
@@ -205,10 +210,17 @@ async function handleUpdate(update) {
   if (!langPair) return;
 
   try {
-    var lang1 = langPair.lang1;
-    var lang2 = langPair.lang2;
-    var sourceLang = detectLanguage(text, lang1, lang2);
-    var targetLang = sourceLang === lang1 ? lang2 : lang1;
+    var sourceLang, targetLang;
+
+    // Zorla dil atanmış kullanıcı mı?
+    if (USER_FORCE_LANGS[userId]) {
+      sourceLang = USER_FORCE_LANGS[userId].source;
+      targetLang = USER_FORCE_LANGS[userId].target;
+    } else {
+      // Normal otomatik algılama
+      sourceLang = detectLanguage(text, langPair.lang1, langPair.lang2);
+      targetLang = sourceLang === langPair.lang1 ? langPair.lang2 : langPair.lang1;
+    }
 
     var replaced = replaceEndearments(text, sourceLang, targetLang);
     var translated = await translateText(replaced.text, targetLang, sourceLang);
