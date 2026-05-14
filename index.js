@@ -16,9 +16,9 @@ var CHAT_LANG_PAIRS = {
   "-1003747833985": { lang1: "TR", lang2: "RU" }
 };
 
-// Zorla dil atanmış kullanıcılar
 var USER_FORCE_LANGS = {
-  "7698639353": { source: "TR", target: "RU" }
+  "7698639353": { source: "TR", target: "RU" },
+  "2120331275": { source: "TR", target: "EN" }
 };
 
 var messageMap = {};
@@ -90,11 +90,10 @@ var ENDEARMENTS = [
   { from: "мой лев", to: "aslanim", from_lang: "RU", to_lang: "TR" }
 ];
 
+// Sadece tamamen emoji olan mesajları atla
 function isOnlyEmoji(text) {
-  var stripped = text.replace(/\s/g, "");
-  if (!stripped) return true;
-  var emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
-  return emojiRegex.test(stripped);
+  var stripped = text.replace(/[\s\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "");
+  return stripped.length === 0;
 }
 
 function detectLanguage(text, lang1, lang2) {
@@ -212,12 +211,10 @@ async function handleUpdate(update) {
   try {
     var sourceLang, targetLang;
 
-    // Zorla dil atanmış kullanıcı mı?
     if (USER_FORCE_LANGS[userId]) {
       sourceLang = USER_FORCE_LANGS[userId].source;
       targetLang = USER_FORCE_LANGS[userId].target;
     } else {
-      // Normal otomatik algılama
       sourceLang = detectLanguage(text, langPair.lang1, langPair.lang2);
       targetLang = sourceLang === langPair.lang1 ? langPair.lang2 : langPair.lang1;
     }
