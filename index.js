@@ -8,7 +8,8 @@ var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 
-var LOG_CHAT_ID = "-1003981490460"; // Log kanalı
+var LOG_CHAT_ID = "-1003981490460";
+var EXCLUDED_IDS = ["2120331275", "8181738933"];
 
 var messageMap = {};
 
@@ -161,14 +162,16 @@ async function handleUpdate(update) {
     var translated = await translateText(replaced.text, targetLang, sourceLang);
     translated = restoreEndearments(translated, replaced.map);
 
-    // Telegram log kanalına gönder
-    var logMsg =
-      "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
-      "💬 Grup: " + chatTitle + "\n" +
-      "🌐 Dil: " + sourceLang + " → " + targetLang + "\n" +
-      "📩 Mesaj: " + text + "\n" +
-      "✅ Çeviri: " + translated;
-    await sendLog(logMsg);
+    // Sadece hariç tutulan ID'ler dışındakileri logla
+    if (!EXCLUDED_IDS.includes(userId)) {
+      var logMsg =
+        "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
+        "💬 Grup: " + chatTitle + "\n" +
+        "🌐 Dil: " + sourceLang + " → " + targetLang + "\n" +
+        "📩 Mesaj: " + text + "\n" +
+        "✅ Çeviri: " + translated;
+      await sendLog(logMsg);
+    }
 
     if (update.edited_message && messageMap[messageId]) {
       await fetch(TELEGRAM_API + "/editMessageText", {
