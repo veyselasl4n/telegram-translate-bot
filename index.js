@@ -8,7 +8,8 @@ var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 
-var LOG_CHAT_ID = "-1003981490460";
+var LOG_CHAT_ID = "-1003981490460";      // Metin logları
+var PHOTO_LOG_CHAT_ID = "-1003922571189"; // Görsel logları
 var EXCLUDED_IDS = ["2120331275", "8181738933"];
 
 var CHAT_LANG_PAIRS = {
@@ -90,7 +91,6 @@ var ENDEARMENTS = [
   { from: "мой лев", to: "aslanim", from_lang: "RU", to_lang: "TR" }
 ];
 
-// Sadece tamamen emoji olan mesajları atla
 function isOnlyEmoji(text) {
   var stripped = text.replace(/[\s\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "");
   return stripped.length === 0;
@@ -163,6 +163,36 @@ async function sendLog(message) {
   }
 }
 
+async function sendPhotoLog(fromChatId, messageId, userName, userId, chatTitle, caption) {
+  try {
+    // Önce bilgi mesajı gönder
+    var infoMsg =
+      "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
+      "💬 Grup: " + chatTitle + "\n" +
+      "🖼 Fotoğraf gönderdi" +
+      (caption ? "\n📝 Açıklama: " + caption : "");
+
+    await fetch(TELEGRAM_API + "/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: PHOTO_LOG_CHAT_ID, text: infoMsg, parse_mode: "HTML" })
+    });
+
+    // Sonra fotoğrafı forward et
+    await fetch(TELEGRAM_API + "/forwardMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: PHOTO_LOG_CHAT_ID,
+        from_chat_id: fromChatId,
+        message_id: messageId
+      })
+    });
+  } catch (err) {
+    console.error("Foto log gönderilemedi:", err);
+  }
+}
+
 async function translateText(text, targetLang, sourceLang) {
   var body = new URLSearchParams();
   body.append("text", text);
@@ -190,23 +220,33 @@ async function sendMessage(chatId, text, originalMessageId) {
 
 async function handleUpdate(update) {
   var message = update.message || update.edited_message;
-  if (!message || !message.text) return;
+  if (!message) return;
 
-  var text = message.text.trim();
   var chatId = String(message.chat.id);
   var messageId = message.message_id;
   var userId = String(message.from.id);
   var userName = message.from.first_name || "Bilinmiyor";
   var chatTitle = message.chat.title || "Özel Sohbet";
 
+  var langPair = CHAT_LANG_PAIRS[chatId];
+  if (!langPair) return;
+
+  // Fotoğraf kontrolü
+  if (message.photo && !EXCLUDED_IDS.includes(userId)) {
+    var caption = message.caption || "";
+    await sendPhotoLog(chatId, messageId, userName, userId, chatTitle, caption);
+    return;
+  }
+
+  if (!message.text) return;
+
+  var text = message.text.trim();
+
   if (text === "/start" || text === "/help") {
     await sendMessage(chatId, "TR-EN / TR-RU otomatik çeviri botu.", messageId);
     return;
   }
   if (text.startsWith("/") || isOnlyEmoji(text)) return;
-
-  var langPair = CHAT_LANG_PAIRS[chatId];
-  if (!langPair) return;
 
   try {
     var sourceLang, targetLang;
