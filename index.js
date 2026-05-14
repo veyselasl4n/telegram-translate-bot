@@ -8,10 +8,13 @@ var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 
-// Hafıza: { 'kullanici_mesaj_id': 'bot_mesaj_id' }
-var messageMap = {};
+// Sabit kullanıcı dilleri
+var USER_LANGS = {
+  "2120331275": "TR",  // Veysel
+  "8181738933": "EN"   // Eşi
+};
 
-// Kullanıcı dil hafızası: { 'user_id': 'TR' veya 'EN' }
+var messageMap = {};
 var userLangMap = {};
 
 var ENDEARMENTS = [
@@ -57,11 +60,9 @@ function isOnlyEmoji(text) {
 }
 
 function detectLanguage(text) {
-  // Önce Türkçe özel karakter kontrolü
   var trChars = /[\u00e7\u00c7\u011f\u011e\u0131\u0130\u00f6\u00d6\u015f\u015e\u00fc\u00dc]/;
   if (trChars.test(text)) return "TR";
 
-  // Türkçe yaygın kelimeler (özel karakter içermeyenler)
   var trWords = [
     "sana", "bana", "beni", "seni", "ama", "dil", "kod", "yazmam",
     "gerekiyor", "kurban", "olurum", "korkma", "benden", "asla",
@@ -77,7 +78,6 @@ function detectLanguage(text) {
   var lowerText = text.toLowerCase();
   var words = lowerText.split(/\s+/);
   var trCount = words.filter(w => trWords.includes(w)).length;
-
   return trCount >= 2 ? "TR" : "EN";
 }
 
@@ -137,17 +137,16 @@ async function handleUpdate(update) {
   var text = message.text.trim();
   var chatId = message.chat.id;
   var messageId = message.message_id;
-  var userId = message.from.id;
+  var userId = String(message.from.id);
 
   if (text === "/start" || text === "/help") {
     await sendMessage(chatId, "TR-EN otomatik çeviri botu.\n/reset - Dil hafızasını sıfırla", messageId);
     return;
   }
 
-  // Dil sıfırlama komutu
   if (text === "/reset") {
     delete userLangMap[userId];
-    await sendMessage(chatId, "Dil hafızası sıfırlandı. Bir sonraki mesajda yeniden algılanacak.", messageId);
+    await sendMessage(chatId, "Dil hafızası sıfırlandı.", messageId);
     return;
   }
 
@@ -156,11 +155,14 @@ async function handleUpdate(update) {
   try {
     var sourceLang;
 
-    if (userLangMap[userId]) {
-      // Kayıtlı dil varsa direkt kullan
+    if (USER_LANGS[userId]) {
+      // Sabit tanımlı kullanıcı → direkt kullan
+      sourceLang = USER_LANGS[userId];
+    } else if (userLangMap[userId]) {
+      // Daha önce algılanmış → kayıtlı dili kullan
       sourceLang = userLangMap[userId];
     } else {
-      // İlk mesaj: algıla ve kaydet
+      // Yeni kullanıcı → algıla ve kaydet
       sourceLang = detectLanguage(text);
       userLangMap[userId] = sourceLang;
       console.log("Kullanıcı dili kaydedildi:", userId, sourceLang);
