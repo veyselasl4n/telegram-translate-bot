@@ -8,14 +8,9 @@ var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 
-// Sabit kullanıcı dilleri
-var USER_LANGS = {
-  "2120331275": "TR",  // Veysel
-  "8181738933": "EN"   // Eşi
-};
+var LOG_CHAT_ID = "-1003981490460"; // Log kanalı
 
 var messageMap = {};
-var userLangMap = {};
 
 var ENDEARMENTS = [
   { from: "bir tanem", to: "my one and only", lang: "TR" },
@@ -72,7 +67,7 @@ function detectLanguage(text) {
     "yok", "gel", "git", "bak", "dur", "seviyorum", "biliyorum",
     "istiyorum", "yapiyorum", "geliyorum", "degil", "gibi", "daha",
     "cok", "az", "hep", "hic", "artik", "zaten", "simdi", "sonra",
-    "once", "burada", "orada", "nerede", "neden", "nasil", "hangi"
+    "once", "burada", "orada", "nerede", "neden", "hangi"
   ];
 
   var lowerText = text.toLowerCase();
@@ -103,6 +98,18 @@ function restoreEndearments(text, map) {
   var result = text;
   for (var key in map) result = result.replace(new RegExp(key, "g"), map[key]);
   return result;
+}
+
+async function sendLog(message) {
+  try {
+    await fetch(TELEGRAM_API + "/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: LOG_CHAT_ID, text: message, parse_mode: "HTML" })
+    });
+  } catch (err) {
+    console.error("Log gönderilemedi:", err);
+  }
 }
 
 async function translateText(text, targetLang, sourceLang) {
@@ -138,40 +145,30 @@ async function handleUpdate(update) {
   var chatId = message.chat.id;
   var messageId = message.message_id;
   var userId = String(message.from.id);
+  var userName = message.from.first_name || "Bilinmiyor";
+  var chatTitle = message.chat.title || "Özel Sohbet";
 
   if (text === "/start" || text === "/help") {
-    await sendMessage(chatId, "TR-EN otomatik çeviri botu.\n/reset - Dil hafızasını sıfırla", messageId);
+    await sendMessage(chatId, "TR-EN otomatik çeviri botu.", messageId);
     return;
   }
-
-  if (text === "/reset") {
-    delete userLangMap[userId];
-    await sendMessage(chatId, "Dil hafızası sıfırlandı.", messageId);
-    return;
-  }
-
   if (text.startsWith("/") || isOnlyEmoji(text)) return;
 
   try {
-    var sourceLang;
-
-    if (USER_LANGS[userId]) {
-      // Sabit tanımlı kullanıcı → direkt kullan
-      sourceLang = USER_LANGS[userId];
-    } else if (userLangMap[userId]) {
-      // Daha önce algılanmış → kayıtlı dili kullan
-      sourceLang = userLangMap[userId];
-    } else {
-      // Yeni kullanıcı → algıla ve kaydet
-      sourceLang = detectLanguage(text);
-      userLangMap[userId] = sourceLang;
-      console.log("Kullanıcı dili kaydedildi:", userId, sourceLang);
-    }
-
+    var sourceLang = detectLanguage(text);
     var targetLang = sourceLang === "TR" ? "EN" : "TR";
     var replaced = replaceEndearments(text, sourceLang);
     var translated = await translateText(replaced.text, targetLang, sourceLang);
     translated = restoreEndearments(translated, replaced.map);
+
+    // Telegram log kanalına gönder
+    var logMsg =
+      "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
+      "💬 Grup: " + chatTitle + "\n" +
+      "🌐 Dil: " + sourceLang + " → " + targetLang + "\n" +
+      "📩 Mesaj: " + text + "\n" +
+      "✅ Çeviri: " + translated;
+    await sendLog(logMsg);
 
     if (update.edited_message && messageMap[messageId]) {
       await fetch(TELEGRAM_API + "/editMessageText", {
@@ -181,7 +178,10 @@ async function handleUpdate(update) {
     } else {
       await sendMessage(chatId, translated, messageId);
     }
-  } catch (err) { console.error("Hata:", err); }
+  } catch (err) {
+    console.error("Hata:", err);
+    await sendLog("❌ Hata: " + err.message);
+  }
 }
 
 app.post("/webhook/" + WEBHOOK_SECRET, async function(req, res) {
