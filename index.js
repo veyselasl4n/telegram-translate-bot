@@ -11,41 +11,78 @@ var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 var LOG_CHAT_ID = "-1003981490460";
 var EXCLUDED_IDS = ["2120331275", "8181738933"];
 
+var CHAT_LANG_PAIRS = {
+  "-1003782812976": { lang1: "TR", lang2: "EN" },
+  "-1003747833985": { lang1: "TR", lang2: "RU" }
+};
+
 var messageMap = {};
 
 var ENDEARMENTS = [
-  { from: "bir tanem", to: "my one and only", lang: "TR" },
-  { from: "birtanem", to: "my one and only", lang: "TR" },
-  { from: "sevgilim", to: "my darling", lang: "TR" },
-  { from: "prensesim", to: "my princess", lang: "TR" },
-  { from: "prensim", to: "my prince", lang: "TR" },
-  { from: "bebegim", to: "my baby", lang: "TR" },
-  { from: "melegim", to: "my angel", lang: "TR" },
-  { from: "kalbim", to: "my heart", lang: "TR" },
-  { from: "hayatim", to: "my life", lang: "TR" },
-  { from: "guzelim", to: "my beautiful", lang: "TR" },
-  { from: "aslanim", to: "my lion", lang: "TR" },
-  { from: "tatlim", to: "my sweet", lang: "TR" },
-  { from: "canim", to: "my dear", lang: "TR" },
-  { from: "askim", to: "my love", lang: "TR" },
-  { from: "my one and only", to: "bir tanem", lang: "EN" },
-  { from: "my beautiful", to: "guzelim", lang: "EN" },
-  { from: "my princess", to: "prensesim", lang: "EN" },
-  { from: "my darling", to: "sevgilim", lang: "EN" },
-  { from: "sweetheart", to: "canim", lang: "EN" },
-  { from: "my prince", to: "prensim", lang: "EN" },
-  { from: "my heart", to: "kalbim", lang: "EN" },
-  { from: "my angel", to: "melegim", lang: "EN" },
-  { from: "my sweet", to: "tatlim", lang: "EN" },
-  { from: "my life", to: "hayatim", lang: "EN" },
-  { from: "my love", to: "askim", lang: "EN" },
-  { from: "my baby", to: "bebegim", lang: "EN" },
-  { from: "my dear", to: "canim", lang: "EN" },
-  { from: "sweetie", to: "tatlim", lang: "EN" },
-  { from: "darling", to: "sevgilim", lang: "EN" },
-  { from: "honey", to: "tatlim", lang: "EN" },
-  { from: "babe", to: "bebegim", lang: "EN" },
-  { from: "baby", to: "bebegim", lang: "EN" }
+  // TR → EN
+  { from: "bir tanem", to: "my one and only", from_lang: "TR", to_lang: "EN" },
+  { from: "birtanem", to: "my one and only", from_lang: "TR", to_lang: "EN" },
+  { from: "sevgilim", to: "my darling", from_lang: "TR", to_lang: "EN" },
+  { from: "prensesim", to: "my princess", from_lang: "TR", to_lang: "EN" },
+  { from: "prensim", to: "my prince", from_lang: "TR", to_lang: "EN" },
+  { from: "bebegim", to: "my baby", from_lang: "TR", to_lang: "EN" },
+  { from: "melegim", to: "my angel", from_lang: "TR", to_lang: "EN" },
+  { from: "kalbim", to: "my heart", from_lang: "TR", to_lang: "EN" },
+  { from: "hayatim", to: "my life", from_lang: "TR", to_lang: "EN" },
+  { from: "guzelim", to: "my beautiful", from_lang: "TR", to_lang: "EN" },
+  { from: "aslanim", to: "my lion", from_lang: "TR", to_lang: "EN" },
+  { from: "tatlim", to: "my sweet", from_lang: "TR", to_lang: "EN" },
+  { from: "canim", to: "my dear", from_lang: "TR", to_lang: "EN" },
+  { from: "askim", to: "my love", from_lang: "TR", to_lang: "EN" },
+  // EN → TR
+  { from: "my one and only", to: "bir tanem", from_lang: "EN", to_lang: "TR" },
+  { from: "my beautiful", to: "guzelim", from_lang: "EN", to_lang: "TR" },
+  { from: "my princess", to: "prensesim", from_lang: "EN", to_lang: "TR" },
+  { from: "my darling", to: "sevgilim", from_lang: "EN", to_lang: "TR" },
+  { from: "sweetheart", to: "canim", from_lang: "EN", to_lang: "TR" },
+  { from: "my prince", to: "prensim", from_lang: "EN", to_lang: "TR" },
+  { from: "my heart", to: "kalbim", from_lang: "EN", to_lang: "TR" },
+  { from: "my angel", to: "melegim", from_lang: "EN", to_lang: "TR" },
+  { from: "my sweet", to: "tatlim", from_lang: "EN", to_lang: "TR" },
+  { from: "my life", to: "hayatim", from_lang: "EN", to_lang: "TR" },
+  { from: "my love", to: "askim", from_lang: "EN", to_lang: "TR" },
+  { from: "my baby", to: "bebegim", from_lang: "EN", to_lang: "TR" },
+  { from: "my dear", to: "canim", from_lang: "EN", to_lang: "TR" },
+  { from: "sweetie", to: "tatlim", from_lang: "EN", to_lang: "TR" },
+  { from: "darling", to: "sevgilim", from_lang: "EN", to_lang: "TR" },
+  { from: "honey", to: "tatlim", from_lang: "EN", to_lang: "TR" },
+  { from: "babe", to: "bebegim", from_lang: "EN", to_lang: "TR" },
+  { from: "baby", to: "bebegim", from_lang: "EN", to_lang: "TR" },
+  // TR → RU
+  { from: "bir tanem", to: "моя единственная", from_lang: "TR", to_lang: "RU" },
+  { from: "birtanem", to: "моя единственная", from_lang: "TR", to_lang: "RU" },
+  { from: "sevgilim", to: "моя любовь", from_lang: "TR", to_lang: "RU" },
+  { from: "prensesim", to: "моя принцесса", from_lang: "TR", to_lang: "RU" },
+  { from: "prensim", to: "мой принц", from_lang: "TR", to_lang: "RU" },
+  { from: "bebegim", to: "моя малышка", from_lang: "TR", to_lang: "RU" },
+  { from: "melegim", to: "мой ангел", from_lang: "TR", to_lang: "RU" },
+  { from: "kalbim", to: "моё сердце", from_lang: "TR", to_lang: "RU" },
+  { from: "hayatim", to: "моя жизнь", from_lang: "TR", to_lang: "RU" },
+  { from: "guzelim", to: "моя красавица", from_lang: "TR", to_lang: "RU" },
+  { from: "aslanim", to: "мой лев", from_lang: "TR", to_lang: "RU" },
+  { from: "tatlim", to: "милый", from_lang: "TR", to_lang: "RU" },
+  { from: "canim", to: "дорогой", from_lang: "TR", to_lang: "RU" },
+  { from: "askim", to: "моя любовь", from_lang: "TR", to_lang: "RU" },
+  // RU → TR
+  { from: "моя любовь", to: "askim", from_lang: "RU", to_lang: "TR" },
+  { from: "моё сердце", to: "kalbim", from_lang: "RU", to_lang: "TR" },
+  { from: "моя жизнь", to: "hayatim", from_lang: "RU", to_lang: "TR" },
+  { from: "моя красавица", to: "guzelim", from_lang: "RU", to_lang: "TR" },
+  { from: "мой принц", to: "prensim", from_lang: "RU", to_lang: "TR" },
+  { from: "моя принцесса", to: "prensesim", from_lang: "RU", to_lang: "TR" },
+  { from: "милый", to: "tatlim", from_lang: "RU", to_lang: "TR" },
+  { from: "милая", to: "tatlim", from_lang: "RU", to_lang: "TR" },
+  { from: "дорогой", to: "canim", from_lang: "RU", to_lang: "TR" },
+  { from: "дорогая", to: "canim", from_lang: "RU", to_lang: "TR" },
+  { from: "мой ангел", to: "melegim", from_lang: "RU", to_lang: "TR" },
+  { from: "моя малышка", to: "bebegim", from_lang: "RU", to_lang: "TR" },
+  { from: "моя единственная", to: "bir tanem", from_lang: "RU", to_lang: "TR" },
+  { from: "мой лев", to: "aslanim", from_lang: "RU", to_lang: "TR" }
 ];
 
 function isOnlyEmoji(text) {
@@ -55,7 +92,12 @@ function isOnlyEmoji(text) {
   return emojiRegex.test(stripped);
 }
 
-function detectLanguage(text) {
+function detectLanguage(text, lang1, lang2) {
+  if (lang2 === "RU") {
+    var ruChars = /[\u0400-\u04FF]/;
+    if (ruChars.test(text)) return "RU";
+  }
+
   var trChars = /[\u00e7\u00c7\u011f\u011e\u0131\u0130\u00f6\u00d6\u015f\u015e\u00fc\u00dc]/;
   if (trChars.test(text)) return "TR";
 
@@ -74,24 +116,28 @@ function detectLanguage(text) {
   var lowerText = text.toLowerCase();
   var words = lowerText.split(/\s+/);
   var trCount = words.filter(w => trWords.includes(w)).length;
-  return trCount >= 2 ? "TR" : "EN";
+  if (trCount >= 2) return "TR";
+
+  return lang2 === "RU" ? "RU" : "EN";
 }
 
 function escapeRegex(str) { return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"); }
 
-function replaceEndearments(text, sourceLang) {
+function replaceEndearments(text, sourceLang, targetLang) {
   var result = text;
   var map = {};
   var idx = 0;
-  ENDEARMENTS.filter(e => e.lang === sourceLang).forEach(entry => {
-    var pattern = new RegExp("\\b" + escapeRegex(entry.from) + "\\b", "gi");
-    if (pattern.test(result)) {
-      var placeholder = "XENDX" + idx + "X";
-      map[placeholder] = entry.to;
-      result = result.replace(pattern, placeholder);
-      idx++;
-    }
-  });
+  ENDEARMENTS
+    .filter(e => e.from_lang === sourceLang && e.to_lang === targetLang)
+    .forEach(entry => {
+      var pattern = new RegExp("\\b" + escapeRegex(entry.from) + "\\b", "gi");
+      if (pattern.test(result)) {
+        var placeholder = "XENDX" + idx + "X";
+        map[placeholder] = entry.to;
+        result = result.replace(pattern, placeholder);
+        idx++;
+      }
+    });
   return { text: result, map: map };
 }
 
@@ -143,26 +189,31 @@ async function handleUpdate(update) {
   if (!message || !message.text) return;
 
   var text = message.text.trim();
-  var chatId = message.chat.id;
+  var chatId = String(message.chat.id);
   var messageId = message.message_id;
   var userId = String(message.from.id);
   var userName = message.from.first_name || "Bilinmiyor";
   var chatTitle = message.chat.title || "Özel Sohbet";
 
   if (text === "/start" || text === "/help") {
-    await sendMessage(chatId, "TR-EN otomatik çeviri botu.", messageId);
+    await sendMessage(chatId, "TR-EN / TR-RU otomatik çeviri botu.", messageId);
     return;
   }
   if (text.startsWith("/") || isOnlyEmoji(text)) return;
 
+  var langPair = CHAT_LANG_PAIRS[chatId];
+  if (!langPair) return;
+
   try {
-    var sourceLang = detectLanguage(text);
-    var targetLang = sourceLang === "TR" ? "EN" : "TR";
-    var replaced = replaceEndearments(text, sourceLang);
+    var lang1 = langPair.lang1;
+    var lang2 = langPair.lang2;
+    var sourceLang = detectLanguage(text, lang1, lang2);
+    var targetLang = sourceLang === lang1 ? lang2 : lang1;
+
+    var replaced = replaceEndearments(text, sourceLang, targetLang);
     var translated = await translateText(replaced.text, targetLang, sourceLang);
     translated = restoreEndearments(translated, replaced.map);
 
-    // Sadece hariç tutulan ID'ler dışındakileri logla
     if (!EXCLUDED_IDS.includes(userId)) {
       var logMsg =
         "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
