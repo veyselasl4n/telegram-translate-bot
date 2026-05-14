@@ -11,6 +11,9 @@ var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 // Hafıza: { 'kullanici_mesaj_id': 'bot_mesaj_id' }
 var messageMap = {};
 
+// Kullanıcı dil hafızası: { 'user_id': 'TR' veya 'EN' }
+var userLangMap = {};
+
 var ENDEARMENTS = [
   { from: "bir tanem", to: "my one and only", lang: "TR" },
   { from: "birtanem", to: "my one and only", lang: "TR" },
@@ -54,8 +57,28 @@ function isOnlyEmoji(text) {
 }
 
 function detectLanguage(text) {
+  // Önce Türkçe özel karakter kontrolü
   var trChars = /[\u00e7\u00c7\u011f\u011e\u0131\u0130\u00f6\u00d6\u015f\u015e\u00fc\u00dc]/;
-  return trChars.test(text) ? "TR" : "EN";
+  if (trChars.test(text)) return "TR";
+
+  // Türkçe yaygın kelimeler (özel karakter içermeyenler)
+  var trWords = [
+    "sana", "bana", "beni", "seni", "ama", "dil", "kod", "yazmam",
+    "gerekiyor", "kurban", "olurum", "korkma", "benden", "asla",
+    "zarar", "vermem", "olan", "icin", "bile", "ile", "sen", "ben",
+    "bir", "bu", "da", "de", "mi", "mu", "ne", "ki", "ve", "ya",
+    "her", "nasil", "tamam", "evet", "hayir", "iyi", "kotu", "var",
+    "yok", "gel", "git", "bak", "dur", "seviyorum", "biliyorum",
+    "istiyorum", "yapiyorum", "geliyorum", "degil", "gibi", "daha",
+    "cok", "az", "hep", "hic", "artik", "zaten", "simdi", "sonra",
+    "once", "burada", "orada", "nerede", "neden", "nasil", "hangi"
+  ];
+
+  var lowerText = text.toLowerCase();
+  var words = lowerText.split(/\s+/);
+  var trCount = words.filter(w => trWords.includes(w)).length;
+
+  return trCount >= 2 ? "TR" : "EN";
 }
 
 function escapeRegex(str) { return str.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, "\\$&"); }
@@ -98,7 +121,6 @@ async function translateText(text, targetLang, sourceLang) {
   return data.translations[0].text;
 }
 
-// Bot mesaj gönderdiğinde ID'sini hafızaya kaydediyoruz
 async function sendMessage(chatId, text, originalMessageId) {
   var payload = { chat_id: chatId, text: text, reply_to_message_id: originalMessageId };
   var res = await fetch(TELEGRAM_API + "/sendMessage", {
@@ -109,35 +131,52 @@ async function sendMessage(chatId, text, originalMessageId) {
 }
 
 async function handleUpdate(update) {
-  // Hem normal hem de düzenlenen mesajları al
   var message = update.message || update.edited_message;
   if (!message || !message.text) return;
 
   var text = message.text.trim();
   var chatId = message.chat.id;
   var messageId = message.message_id;
+  var userId = message.from.id;
 
   if (text === "/start" || text === "/help") {
-    await sendMessage(chatId, "TR-EN otomatik çeviri botu.", messageId);
+    await sendMessage(chatId, "TR-EN otomatik çeviri botu.\n/reset - Dil hafızasını sıfırla", messageId);
     return;
   }
+
+  // Dil sıfırlama komutu
+  if (text === "/reset") {
+    delete userLangMap[userId];
+    await sendMessage(chatId, "Dil hafızası sıfırlandı. Bir sonraki mesajda yeniden algılanacak.", messageId);
+    return;
+  }
+
   if (text.startsWith("/") || isOnlyEmoji(text)) return;
 
   try {
-    var sourceLang = detectLanguage(text);
+    var sourceLang;
+
+    if (userLangMap[userId]) {
+      // Kayıtlı dil varsa direkt kullan
+      sourceLang = userLangMap[userId];
+    } else {
+      // İlk mesaj: algıla ve kaydet
+      sourceLang = detectLanguage(text);
+      userLangMap[userId] = sourceLang;
+      console.log("Kullanıcı dili kaydedildi:", userId, sourceLang);
+    }
+
     var targetLang = sourceLang === "TR" ? "EN" : "TR";
     var replaced = replaceEndearments(text, sourceLang);
     var translated = await translateText(replaced.text, targetLang, sourceLang);
     translated = restoreEndearments(translated, replaced.map);
 
-    // Mesaj daha önce gönderildiyse (düzenleme varsa) GÜNCELLE
     if (update.edited_message && messageMap[messageId]) {
       await fetch(TELEGRAM_API + "/editMessageText", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ chat_id: chatId, message_id: messageMap[messageId], text: translated })
       });
     } else {
-      // Yeni mesaj ise gönder
       await sendMessage(chatId, translated, messageId);
     }
   } catch (err) { console.error("Hata:", err); }
