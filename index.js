@@ -22,6 +22,9 @@ var USER_FORCE_LANGS = {
   "2120331275": { source: "TR", target: "EN" }
 };
 
+// Log'da EN çevirisi de gösterilecek kullanıcılar
+var LOG_EXTRA_EN = ["7698639353"];
+
 var messageMap = {};
 
 var ENDEARMENTS = [
@@ -186,7 +189,6 @@ async function sendMediaLog(message, userName, userId, chatTitle) {
     var mediaType = getMediaType(message);
     var caption = message.caption || "";
 
-    // Bilgi mesajı gönder
     var infoMsg =
       "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
       "💬 Grup: " + chatTitle + "\n" +
@@ -199,7 +201,6 @@ async function sendMediaLog(message, userName, userId, chatTitle) {
       body: JSON.stringify({ chat_id: PHOTO_LOG_CHAT_ID, text: infoMsg, parse_mode: "HTML" })
     });
 
-    // Süreli mesaj değilse forward et
     if (!message.has_media_spoiler) {
       await fetch(TELEGRAM_API + "/forwardMessage", {
         method: "POST",
@@ -214,7 +215,7 @@ async function sendMediaLog(message, userName, userId, chatTitle) {
       await fetch(TELEGRAM_API + "/sendMessage", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: PHOTO_LOG_CHAT_ID, text: "⏱ Süreli medya (görüntülenemez)", parse_mode: "HTML" })
+        body: JSON.stringify({ chat_id: PHOTO_LOG_CHAT_ID, text: "⏱ Süreli medya (görüntülenemez)" })
       });
     }
   } catch (err) {
@@ -257,7 +258,7 @@ async function handleUpdate(update) {
   var userName = message.from.first_name || "Bilinmiyor";
   var chatTitle = message.chat.title || "Özel Sohbet";
 
-  // Medya kontrolü - her gruptan gelsin, langPair şartı yok
+  // Medya kontrolü
   if (hasMedia(message) && !EXCLUDED_IDS.includes(userId)) {
     await sendMediaLog(message, userName, userId, chatTitle);
     return;
@@ -297,7 +298,14 @@ async function handleUpdate(update) {
         "💬 Grup: " + chatTitle + "\n" +
         "🌐 Dil: " + sourceLang + " → " + targetLang + "\n" +
         "📩 Mesaj: " + text + "\n" +
-        "✅ Çeviri: " + translated;
+        "✅ Çeviri (" + targetLang + "): " + translated;
+
+      // Ekstra EN çevirisi gerekiyor mu?
+      if (LOG_EXTRA_EN.includes(userId) && targetLang !== "EN") {
+        var translatedEN = await translateText(text, "EN", sourceLang);
+        logMsg += "\n✅ Çeviri (EN): " + translatedEN;
+      }
+
       await sendLog(logMsg);
     }
 
