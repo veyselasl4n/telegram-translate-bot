@@ -23,7 +23,8 @@ var USER_FORCE_LANGS = {
 };
 
 // Log'da EN çevirisi de gösterilecek kullanıcılar
-var LOG_EXTRA_EN = ["7698639353"];
+var LOG_EXTRA_EN = ["7698639353", "770236905"];
+
 
 var messageMap = {};
 
