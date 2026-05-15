@@ -8,8 +8,8 @@ var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
 
-var LOG_CHAT_ID = "-1003981490460";      // Metin logları
-var PHOTO_LOG_CHAT_ID = "-1003922571189"; // Görsel logları
+var LOG_CHAT_ID = "-1003981490460";
+var PHOTO_LOG_CHAT_ID = "-1003922571189";
 var EXCLUDED_IDS = ["2120331275", "8181738933"];
 
 var CHAT_LANG_PAIRS = {
@@ -96,6 +96,24 @@ function isOnlyEmoji(text) {
   return stripped.length === 0;
 }
 
+function getMediaType(message) {
+  if (message.photo) return "🖼 Fotoğraf";
+  if (message.video) return "🎥 Video";
+  if (message.video_note) return "🎬 Canlı Video";
+  if (message.animation) return "🎞 GIF";
+  if (message.sticker) return "🎭 Sticker";
+  if (message.voice) return "🎤 Ses Mesajı";
+  if (message.document && message.document.mime_type && message.document.mime_type.startsWith("image/")) return "🖼 Döküman Görsel";
+  return null;
+}
+
+function hasMedia(message) {
+  return !!(message.photo || message.video || message.video_note ||
+    message.animation || message.sticker || message.voice ||
+    (message.document && message.document.mime_type &&
+      message.document.mime_type.startsWith("image/")));
+}
+
 function detectLanguage(text, lang1, lang2) {
   if (lang2 === "RU") {
     var ruChars = /[\u0400-\u04FF]/;
@@ -163,13 +181,16 @@ async function sendLog(message) {
   }
 }
 
-async function sendPhotoLog(fromChatId, messageId, userName, userId, chatTitle, caption) {
+async function sendMediaLog(message, userName, userId, chatTitle) {
   try {
-    // Önce bilgi mesajı gönder
+    var mediaType = getMediaType(message);
+    var caption = message.caption || "";
+
+    // Bilgi mesajı gönder
     var infoMsg =
       "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
       "💬 Grup: " + chatTitle + "\n" +
-      "🖼 Fotoğraf gönderdi" +
+      mediaType +
       (caption ? "\n📝 Açıklama: " + caption : "");
 
     await fetch(TELEGRAM_API + "/sendMessage", {
@@ -178,18 +199,26 @@ async function sendPhotoLog(fromChatId, messageId, userName, userId, chatTitle, 
       body: JSON.stringify({ chat_id: PHOTO_LOG_CHAT_ID, text: infoMsg, parse_mode: "HTML" })
     });
 
-    // Sonra fotoğrafı forward et
-    await fetch(TELEGRAM_API + "/forwardMessage", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: PHOTO_LOG_CHAT_ID,
-        from_chat_id: fromChatId,
-        message_id: messageId
-      })
-    });
+    // Süreli mesaj değilse forward et
+    if (!message.has_media_spoiler) {
+      await fetch(TELEGRAM_API + "/forwardMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: PHOTO_LOG_CHAT_ID,
+          from_chat_id: message.chat.id,
+          message_id: message.message_id
+        })
+      });
+    } else {
+      await fetch(TELEGRAM_API + "/sendMessage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: PHOTO_LOG_CHAT_ID, text: "⏱ Süreli medya (görüntülenemez)", parse_mode: "HTML" })
+      });
+    }
   } catch (err) {
-    console.error("Foto log gönderilemedi:", err);
+    console.error("Medya log gönderilemedi:", err);
   }
 }
 
@@ -228,13 +257,9 @@ async function handleUpdate(update) {
   var userName = message.from.first_name || "Bilinmiyor";
   var chatTitle = message.chat.title || "Özel Sohbet";
 
-  var langPair = CHAT_LANG_PAIRS[chatId];
-  if (!langPair) return;
-
-  // Fotoğraf kontrolü
-  if (message.photo && !EXCLUDED_IDS.includes(userId)) {
-    var caption = message.caption || "";
-    await sendPhotoLog(chatId, messageId, userName, userId, chatTitle, caption);
+  // Medya kontrolü - her gruptan gelsin, langPair şartı yok
+  if (hasMedia(message) && !EXCLUDED_IDS.includes(userId)) {
+    await sendMediaLog(message, userName, userId, chatTitle);
     return;
   }
 
@@ -247,6 +272,9 @@ async function handleUpdate(update) {
     return;
   }
   if (text.startsWith("/") || isOnlyEmoji(text)) return;
+
+  var langPair = CHAT_LANG_PAIRS[chatId];
+  if (!langPair) return;
 
   try {
     var sourceLang, targetLang;
