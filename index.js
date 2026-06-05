@@ -330,6 +330,14 @@ async function handleUpdate(update) {
     var translated = await translateText(replaced.text, targetLang, sourceLang);
     translated = restoreEndearments(translated, replaced.map);
 
+    // USER_FORCE_TARGET kullanıcıları için hem TR hem EN çeviri
+    var finalMessage = translated;
+    var translatedEN = null;
+    if (USER_FORCE_TARGET[userId]) {
+      translatedEN = await translateText(text, "EN", sourceLang);
+      finalMessage = "🇹🇷 " + translated + "\n🇬🇧 " + translatedEN;
+    }
+
     if (!EXCLUDED_IDS.includes(userId)) {
       var logMsg =
         "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
@@ -339,7 +347,7 @@ async function handleUpdate(update) {
         "✅ Çeviri (" + targetLang + "): " + translated;
 
       if (LOG_EXTRA_EN.includes(userId) && targetLang !== "EN") {
-        var translatedEN = await translateText(text, "EN", sourceLang);
+        if (!translatedEN) translatedEN = await translateText(text, "EN", sourceLang);
         logMsg += "\n✅ Çeviri (EN): " + translatedEN;
       }
 
@@ -349,10 +357,10 @@ async function handleUpdate(update) {
     if (update.edited_message && messageMap[messageId]) {
       await fetch(TELEGRAM_API + "/editMessageText", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ chat_id: chatId, message_id: messageMap[messageId], text: translated })
+        body: JSON.stringify({ chat_id: chatId, message_id: messageMap[messageId], text: finalMessage })
       });
     } else {
-      await sendMessage(chatId, translated, messageId);
+      await sendMessage(chatId, finalMessage, messageId);
     }
   } catch (err) {
     console.error("Hata:", err);
