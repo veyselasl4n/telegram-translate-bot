@@ -5,8 +5,10 @@ app.use(express.json());
 var BOT_TOKEN = process.env.BOT_TOKEN;
 var DEEPL_API_KEY = process.env.DEEPL_API_KEY;
 var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
+var GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
+var GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + GEMINI_API_KEY;
 
 var LOG_CHAT_ID = "-1003981490460";
 var PHOTO_LOG_CHAT_ID = "-1003922571189";
@@ -18,13 +20,13 @@ var CHAT_LANG_PAIRS = {
 };
 
 var USER_FORCE_LANGS = {
-  "7698639353": { source: "TR", target: "RU" },
-  "2120331275": { source: "TR", target: "EN" }
+  "7698639353": { source: "TR", target: "EN" },  // TR → EN
+  "2120331275": { source: "TR", target: "EN" },
+  "770236905":  { source: "EN", target: "TR" }   // EN → TR
 };
 
 // Log'da EN çevirisi de gösterilecek kullanıcılar
 var LOG_EXTRA_EN = ["7698639353", "770236905"];
-
 
 var messageMap = {};
 
@@ -240,6 +242,23 @@ async function translateText(text, targetLang, sourceLang) {
   return data.translations[0].text;
 }
 
+// ── YENİ: Gemini ile cevap üret ──────────────────────────────────────────────
+async function askGemini(prompt) {
+  var res = await fetch(GEMINI_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }]
+    })
+  });
+  var data = await res.json();
+  if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+    return data.candidates[0].content.parts[0].text;
+  }
+  throw new Error("Gemini yanıt vermedi: " + JSON.stringify(data));
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function sendMessage(chatId, text, originalMessageId) {
   var payload = { chat_id: chatId, text: text, reply_to_message_id: originalMessageId };
   var res = await fetch(TELEGRAM_API + "/sendMessage", {
@@ -269,8 +288,31 @@ async function handleUpdate(update) {
 
   var text = message.text.trim();
 
+  // ── /ai komutu ─────────────────────────────────────────────────────────────
+  // Grup botlarında komutlar "/ai@BotAdi mesaj" formatında gelebilir
+  var aiMatch = text.match(/^\/ai(?:@\S+)?\s+([\s\S]+)/i);
+  if (aiMatch) {
+    var aiPrompt = aiMatch[1].trim();
+    try {
+      var aiReply = await askGemini(aiPrompt);
+      await sendMessage(chatId, aiReply, messageId);
+      await sendLog(
+        "🤖 <b>/ai komutu</b>\n" +
+        "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
+        "💬 Grup: " + chatTitle + "\n" +
+        "❓ Soru: " + aiPrompt + "\n" +
+        "✅ Cevap: " + aiReply.substring(0, 300) + (aiReply.length > 300 ? "..." : "")
+      );
+    } catch (err) {
+      console.error("Gemini hatası:", err);
+      await sendMessage(chatId, "❌ AI şu an yanıt veremiyor.", messageId);
+    }
+    return; // DeepL çevirme!
+  }
+  // ───────────────────────────────────────────────────────────────────────────
+
   if (text === "/start" || text === "/help") {
-    await sendMessage(chatId, "TR-EN / TR-RU otomatik çeviri botu.", messageId);
+    await sendMessage(chatId, "TR-EN / TR-RU otomatik çeviri botu.\n\n🤖 /ai [soru] yazarak yapay zekaya soru sorabilirsin.", messageId);
     return;
   }
   if (text.startsWith("/") || isOnlyEmoji(text)) return;
@@ -301,7 +343,6 @@ async function handleUpdate(update) {
         "📩 Mesaj: " + text + "\n" +
         "✅ Çeviri (" + targetLang + "): " + translated;
 
-      // Ekstra EN çevirisi gerekiyor mu?
       if (LOG_EXTRA_EN.includes(userId) && targetLang !== "EN") {
         var translatedEN = await translateText(text, "EN", sourceLang);
         logMsg += "\n✅ Çeviri (EN): " + translatedEN;
