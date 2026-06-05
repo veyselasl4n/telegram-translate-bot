@@ -5,10 +5,10 @@ app.use(express.json());
 var BOT_TOKEN = process.env.BOT_TOKEN;
 var DEEPL_API_KEY = process.env.DEEPL_API_KEY;
 var WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
-var GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+var GROQ_API_KEY = process.env.GROQ_API_KEY;
 var TELEGRAM_API = "https://api.telegram.org/bot" + BOT_TOKEN;
 var DEEPL_API = "https://api-free.deepl.com/v2/translate";
-var GEMINI_API = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=" + GEMINI_API_KEY;
+var GROQ_API = "https://api.groq.com/openai/v1/chat/completions";
 
 var LOG_CHAT_ID = "-1003981490460";
 var PHOTO_LOG_CHAT_ID = "-1003922571189";
@@ -20,18 +20,20 @@ var CHAT_LANG_PAIRS = {
 };
 
 var USER_FORCE_LANGS = {
-  "7698639353": { source: "TR", target: "EN" },  // TR → EN
-  "2120331275": { source: "TR", target: "EN" },
-  "770236905":  { source: "EN", target: "TR" }   // EN → TR
+  "7698639353": { source: "TR", target: "EN" },
+  "2120331275": { source: "TR", target: "EN" }
 };
 
-// Log'da EN çevirisi de gösterilecek kullanıcılar
+// Bu kullanıcılar için hedef dil sabit, kaynak otomatik algılanır
+var USER_FORCE_TARGET = {
+  "770236905": "TR"
+};
+
 var LOG_EXTRA_EN = ["7698639353", "770236905"];
 
 var messageMap = {};
 
 var ENDEARMENTS = [
-  // TR → EN
   { from: "bir tanem", to: "my one and only", from_lang: "TR", to_lang: "EN" },
   { from: "birtanem", to: "my one and only", from_lang: "TR", to_lang: "EN" },
   { from: "sevgilim", to: "my darling", from_lang: "TR", to_lang: "EN" },
@@ -46,7 +48,6 @@ var ENDEARMENTS = [
   { from: "tatlim", to: "my sweet", from_lang: "TR", to_lang: "EN" },
   { from: "canim", to: "my dear", from_lang: "TR", to_lang: "EN" },
   { from: "askim", to: "my love", from_lang: "TR", to_lang: "EN" },
-  // EN → TR
   { from: "my one and only", to: "bir tanem", from_lang: "EN", to_lang: "TR" },
   { from: "my beautiful", to: "guzelim", from_lang: "EN", to_lang: "TR" },
   { from: "my princess", to: "prensesim", from_lang: "EN", to_lang: "TR" },
@@ -65,7 +66,6 @@ var ENDEARMENTS = [
   { from: "honey", to: "tatlim", from_lang: "EN", to_lang: "TR" },
   { from: "babe", to: "bebegim", from_lang: "EN", to_lang: "TR" },
   { from: "baby", to: "bebegim", from_lang: "EN", to_lang: "TR" },
-  // TR → RU
   { from: "bir tanem", to: "моя единственная", from_lang: "TR", to_lang: "RU" },
   { from: "birtanem", to: "моя единственная", from_lang: "TR", to_lang: "RU" },
   { from: "sevgilim", to: "моя любовь", from_lang: "TR", to_lang: "RU" },
@@ -80,7 +80,6 @@ var ENDEARMENTS = [
   { from: "tatlim", to: "милый", from_lang: "TR", to_lang: "RU" },
   { from: "canim", to: "дорогой", from_lang: "TR", to_lang: "RU" },
   { from: "askim", to: "моя любовь", from_lang: "TR", to_lang: "RU" },
-  // RU → TR
   { from: "моя любовь", to: "askim", from_lang: "RU", to_lang: "TR" },
   { from: "моё сердце", to: "kalbim", from_lang: "RU", to_lang: "TR" },
   { from: "моя жизнь", to: "hayatim", from_lang: "RU", to_lang: "TR" },
@@ -125,27 +124,21 @@ function detectLanguage(text, lang1, lang2) {
     var ruChars = /[\u0400-\u04FF]/;
     if (ruChars.test(text)) return "RU";
   }
-
   var trChars = /[\u00e7\u00c7\u011f\u011e\u0131\u0130\u00f6\u00d6\u015f\u015e\u00fc\u00dc]/;
   if (trChars.test(text)) return "TR";
-
   var trWords = [
-    "sana", "bana", "beni", "seni", "ama", "dil", "kod", "yazmam",
-    "gerekiyor", "kurban", "olurum", "korkma", "benden", "asla",
-    "zarar", "vermem", "olan", "icin", "bile", "ile", "sen", "ben",
-    "bir", "bu", "da", "de", "mi", "mu", "ne", "ki", "ve", "ya",
-    "her", "nasil", "tamam", "evet", "hayir", "iyi", "kotu", "var",
-    "yok", "gel", "git", "bak", "dur", "seviyorum", "biliyorum",
-    "istiyorum", "yapiyorum", "geliyorum", "degil", "gibi", "daha",
-    "cok", "az", "hep", "hic", "artik", "zaten", "simdi", "sonra",
-    "once", "burada", "orada", "nerede", "neden", "hangi"
+    "sana","bana","beni","seni","ama","dil","kod","yazmam","gerekiyor","kurban",
+    "olurum","korkma","benden","asla","zarar","vermem","olan","icin","bile","ile",
+    "sen","ben","bir","bu","da","de","mi","mu","ne","ki","ve","ya","her","nasil",
+    "tamam","evet","hayir","iyi","kotu","var","yok","gel","git","bak","dur",
+    "seviyorum","biliyorum","istiyorum","yapiyorum","geliyorum","degil","gibi",
+    "daha","cok","az","hep","hic","artik","zaten","simdi","sonra","once",
+    "burada","orada","nerede","neden","hangi"
   ];
-
   var lowerText = text.toLowerCase();
   var words = lowerText.split(/\s+/);
   var trCount = words.filter(w => trWords.includes(w)).length;
   if (trCount >= 2) return "TR";
-
   return lang2 === "RU" ? "RU" : "EN";
 }
 
@@ -191,19 +184,16 @@ async function sendMediaLog(message, userName, userId, chatTitle) {
   try {
     var mediaType = getMediaType(message);
     var caption = message.caption || "";
-
     var infoMsg =
       "👤 <b>" + userName + "</b> (ID: " + userId + ")\n" +
       "💬 Grup: " + chatTitle + "\n" +
       mediaType +
       (caption ? "\n📝 Açıklama: " + caption : "");
-
     await fetch(TELEGRAM_API + "/sendMessage", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: PHOTO_LOG_CHAT_ID, text: infoMsg, parse_mode: "HTML" })
     });
-
     if (!message.has_media_spoiler) {
       await fetch(TELEGRAM_API + "/forwardMessage", {
         method: "POST",
@@ -232,7 +222,6 @@ async function translateText(text, targetLang, sourceLang) {
   body.append("target_lang", targetLang);
   body.append("source_lang", sourceLang);
   if (targetLang === "TR") body.append("formality", "prefer_less");
-
   var res = await fetch(DEEPL_API, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", "Authorization": "DeepL-Auth-Key " + DEEPL_API_KEY },
@@ -242,20 +231,25 @@ async function translateText(text, targetLang, sourceLang) {
   return data.translations[0].text;
 }
 
-// ── YENİ: Gemini ile cevap üret ──────────────────────────────────────────────
-async function askGemini(prompt) {
-  var res = await fetch(GEMINI_API, {
+// ── Groq AI ──────────────────────────────────────────────────────────────────
+async function askAI(prompt) {
+  var res = await fetch(GROQ_API, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": "Bearer " + GROQ_API_KEY
+    },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }]
+      model: "llama-3.3-70b-versatile",
+      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1000
     })
   });
   var data = await res.json();
-  if (data.candidates && data.candidates[0] && data.candidates[0].content) {
-    return data.candidates[0].content.parts[0].text;
+  if (data.choices && data.choices[0]) {
+    return data.choices[0].message.content;
   }
-  throw new Error("Gemini yanıt vermedi: " + JSON.stringify(data));
+  throw new Error("Groq yanıt vermedi: " + JSON.stringify(data));
 }
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -278,7 +272,6 @@ async function handleUpdate(update) {
   var userName = message.from.first_name || "Bilinmiyor";
   var chatTitle = message.chat.title || "Özel Sohbet";
 
-  // Medya kontrolü
   if (hasMedia(message) && !EXCLUDED_IDS.includes(userId)) {
     await sendMediaLog(message, userName, userId, chatTitle);
     return;
@@ -289,12 +282,11 @@ async function handleUpdate(update) {
   var text = message.text.trim();
 
   // ── /ai komutu ─────────────────────────────────────────────────────────────
-  // Grup botlarında komutlar "/ai@BotAdi mesaj" formatında gelebilir
   var aiMatch = text.match(/^\/ai(?:@\S+)?\s+([\s\S]+)/i);
   if (aiMatch) {
     var aiPrompt = aiMatch[1].trim();
     try {
-      var aiReply = await askGemini(aiPrompt);
+      var aiReply = await askAI(aiPrompt);
       await sendMessage(chatId, aiReply, messageId);
       await sendLog(
         "🤖 <b>/ai komutu</b>\n" +
@@ -304,10 +296,10 @@ async function handleUpdate(update) {
         "✅ Cevap: " + aiReply.substring(0, 300) + (aiReply.length > 300 ? "..." : "")
       );
     } catch (err) {
-      console.error("Gemini hatası:", err);
+      console.error("Groq hatası:", err);
       await sendMessage(chatId, "❌ AI şu an yanıt veremiyor.", messageId);
     }
-    return; // DeepL çevirme!
+    return;
   }
   // ───────────────────────────────────────────────────────────────────────────
 
@@ -322,10 +314,13 @@ async function handleUpdate(update) {
 
   try {
     var sourceLang, targetLang;
-
     if (USER_FORCE_LANGS[userId]) {
       sourceLang = USER_FORCE_LANGS[userId].source;
       targetLang = USER_FORCE_LANGS[userId].target;
+    } else if (USER_FORCE_TARGET[userId]) {
+      targetLang = USER_FORCE_TARGET[userId];
+      sourceLang = detectLanguage(text, "EN", "RU");
+      if (sourceLang === targetLang) sourceLang = "EN";
     } else {
       sourceLang = detectLanguage(text, langPair.lang1, langPair.lang2);
       targetLang = sourceLang === langPair.lang1 ? langPair.lang2 : langPair.lang1;
