@@ -20,7 +20,7 @@ var CHAT_LANG_PAIRS = {
 };
 
 var USER_FORCE_LANGS = {
-  "7698639353": { source: "TR", target: "EN" },
+  "7698639353": { source: "TR", target: "RU" },
   "2120331275": { source: "TR", target: "EN" }
 };
 
